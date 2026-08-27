@@ -81,7 +81,7 @@ object ChatSummary : SwitchFeature(),
                 val convId = msgInfo.talker
                 if (convId.isNotEmpty()) {
                     showComposeDialog(view.context) {
-                        SummaryDialogContent(convId)
+                        SummaryDialogContent(convId, onDismiss)
                     }
                 }
             }
@@ -100,7 +100,7 @@ object ChatSummary : SwitchFeature(),
     }
 
     @Composable
-    private fun SummaryDialogContent(convId: String) {
+    private fun SummaryDialogContent(convId: String, onDismiss: () -> Unit) {
         val context = androidx.compose.ui.platform.LocalContext.current
         var state by remember { mutableStateOf<SummaryUiState>(SummaryUiState.Loading) }
         LaunchedEffect(convId) {
