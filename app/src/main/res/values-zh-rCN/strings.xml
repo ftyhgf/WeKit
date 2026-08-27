@@ -598,6 +598,8 @@
     <string name="feature_display_group_member_roles_description">在群聊中显示群成员的身份: 群主, 管理员, 成员</string>
     <string name="feature_display_message_details_name">显示消息详情</string>
     <string name="feature_display_message_details_description">向消息长按菜单添加菜单项, 可查看消息详情</string>
+    <string name="feature_chat_summary_name">聊天总结</string>
+    <string name="feature_chat_summary_description">向消息长按菜单添加菜单项，可用 AI 总结会话最近消息</string>
     <string name="feature_download_files_to_local_storage_name">文件下载到本地</string>
     <string name="feature_download_files_to_local_storage_description">在文件消息菜单添加下载按钮, 允许将文件缓存并保存到本地</string>
     <string name="feature_download_images_to_local_storage_name">图片保存到本地</string>
@@ -2245,6 +2247,20 @@
     <string name="chat_message_details_content">内容</string>
     <string name="chat_message_details_title">消息详情</string>
     <string name="chat_message_details_copied">已复制</string>
+    <string name="chat_summary_no_messages">该会话没有可总结的消息。</string>
+    <string name="chat_summary_menu">聊天总结</string>
+    <string name="chat_summary_title">聊天总结</string>
+    <string name="chat_summary_loading">正在总结最近消息…</string>
+    <string name="chat_summary_analyzed">共分析 %1$d 条消息</string>
+    <string name="chat_summary_speakers">发言人统计</string>
+    <string name="chat_summary_content">内容总结</string>
+    <string name="chat_summary_self">我</string>
+    <string name="chat_summary_peer">对方</string>
+    <string name="chat_summary_unknown">未知</string>
+    <string name="chat_summary_failed">聊天总结失败：%1$s</string>
+    <string name="chat_summary_no_model">未配置可用的模型，请在 WeAgent 设置中选择默认模型。</string>
+    <string name="chat_summary_empty">模型返回了空的总结内容。</string>
+    <string name="chat_summary_system_prompt">你是一个得力的助手。用户会提供一段微信聊天记录，每行格式为“发言人: 消息内容”。请用简洁的中文概括这段对话的核心话题、讨论要点和结论，不超过 300 字。只输出总结本身，不要任何前缀、标签或格式标记。</string>
     <plurals name="chat_message_time_days_ago">
         <item quantity="other">%1$d 天前</item>
     </plurals>

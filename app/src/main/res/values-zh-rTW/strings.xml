@@ -596,6 +596,8 @@
     <string name="feature_display_group_member_roles_description">在羣聊中顯示羣成員的身份: 羣主, 管理員, 成員</string>
     <string name="feature_display_message_details_name">顯示消息詳情</string>
     <string name="feature_display_message_details_description">向消息長按菜單添加菜單項, 可查看消息詳情</string>
+    <string name="feature_chat_summary_name">聊天總結</string>
+    <string name="feature_chat_summary_description">向訊息長按選單新增選單項，可用 AI 總結對話最近的訊息</string>
     <string name="feature_download_files_to_local_storage_name">文件下載到本地</string>
     <string name="feature_download_files_to_local_storage_description">在文件消息菜單添加下載按鈕, 允許將文件緩存並保存到本地</string>
     <string name="feature_download_images_to_local_storage_name">圖片保存到本地</string>
@@ -2240,6 +2242,20 @@
     <string name="chat_message_details_content">內容</string>
     <string name="chat_message_details_title">消息詳情</string>
     <string name="chat_message_details_copied">已複製</string>
+    <string name="chat_summary_no_messages">此對話沒有可總結的訊息。</string>
+    <string name="chat_summary_menu">聊天總結</string>
+    <string name="chat_summary_title">聊天總結</string>
+    <string name="chat_summary_loading">正在總結最近訊息…</string>
+    <string name="chat_summary_analyzed">共分析 %1$d 則訊息</string>
+    <string name="chat_summary_speakers">發言人統計</string>
+    <string name="chat_summary_content">內容總結</string>
+    <string name="chat_summary_self">我</string>
+    <string name="chat_summary_peer">對方</string>
+    <string name="chat_summary_unknown">未知</string>
+    <string name="chat_summary_failed">聊天總結失敗：%1$s</string>
+    <string name="chat_summary_no_model">未設定可用的模型，請在 WeAgent 設定中選擇預設模型。</string>
+    <string name="chat_summary_empty">模型回傳了空的總結內容。</string>
+    <string name="chat_summary_system_prompt">你是一個得力的助手。使用者會提供一段微信聊天記錄，每行格式為「發言人: 訊息內容」。請用簡潔的中文概括這段對話的核心話題、討論要點與結論，不超過 300 字。只輸出總結本身，不要任何前綴、標籤或格式標記。</string>
     <plurals name="chat_message_time_days_ago">
         <item quantity="other">%1$d 天前</item>
     </plurals>
