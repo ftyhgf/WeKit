@@ -19,6 +19,7 @@ object WeAgentSettings {
     // Keys
     const val KEY_TOOL_LOADING_MODE = "tool_loading_mode"            // §3.3 STATIC | DYNAMIC
     const val KEY_SMALL_MODEL_ID = "small_model_id"                  // §5.4 ("" = same as main)
+    const val KEY_CHAT_SUMMARY_MODEL_ID = "chat_summary_model_id"     // chat summary dedicated model (group)
     const val KEY_DEFAULT_MODEL_ID = "default_model_id"             // new-session default
     const val KEY_DEFAULT_SYSTEM_PROMPT_ID = "default_system_prompt_id" // new-session default binding
     const val KEY_DEFAULT_LINUX_ENVIRONMENT_ID = "default_linux_environment_id"
@@ -62,7 +63,7 @@ object WeAgentSettings {
      * rows inside its own Room transaction and calls [clearCached] afterwards.
      */
     suspend fun modelDefaultKeysFor(modelIds: Set<String>): List<String> =
-        listOf(KEY_DEFAULT_MODEL_ID, KEY_SMALL_MODEL_ID).filter { key ->
+        listOf(KEY_DEFAULT_MODEL_ID, KEY_SMALL_MODEL_ID, KEY_CHAT_SUMMARY_MODEL_ID).filter { key ->
             val v = get(key); v != null && v in modelIds
         }
 
@@ -79,6 +80,10 @@ object WeAgentSettings {
 
     /** Small model id for smart-approval & title generation; blank means "same as main model" (§5.4). */
     suspend fun smallModelId(): String? = get(KEY_SMALL_MODEL_ID)?.takeIf { it.isNotBlank() }
+
+    /** Chat summary dedicated model id; null means "follow the global default model". */
+    suspend fun chatSummaryModelId(): String? = get(KEY_CHAT_SUMMARY_MODEL_ID)?.takeIf { it.isNotBlank() }
+    suspend fun setChatSummaryModelId(id: String?) = set(KEY_CHAT_SUMMARY_MODEL_ID, id ?: "")
 
     suspend fun defaultModelId(): String? = get(KEY_DEFAULT_MODEL_ID)?.takeIf { it.isNotBlank() }
     suspend fun defaultSystemPromptId(): String? = get(KEY_DEFAULT_SYSTEM_PROMPT_ID)?.takeIf { it.isNotBlank() }

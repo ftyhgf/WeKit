@@ -596,6 +596,8 @@
     <string name="feature_display_group_member_roles_description">在羣聊中顯示羣成員的身份: 羣主, 管理員, 成員</string>
     <string name="feature_display_message_details_name">顯示消息詳情</string>
     <string name="feature_display_message_details_description">向消息長按菜單添加菜單項, 可查看消息詳情</string>
+    <string name="feature_chat_summary_name">聊天總結</string>
+    <string name="feature_chat_summary_description">向訊息長按選單新增選單項，可用 AI 總結對話最近的訊息</string>
     <string name="feature_download_files_to_local_storage_name">文件下載到本地</string>
     <string name="feature_download_files_to_local_storage_description">在文件消息菜單添加下載按鈕, 允許將文件緩存並保存到本地</string>
     <string name="feature_download_images_to_local_storage_name">圖片保存到本地</string>
@@ -2240,6 +2242,51 @@
     <string name="chat_message_details_content">內容</string>
     <string name="chat_message_details_title">消息詳情</string>
     <string name="chat_message_details_copied">已複製</string>
+    <string name="chat_summary_no_messages">此對話沒有可總結的訊息。</string>
+    <string name="chat_summary_menu">聊天總結</string>
+    <string name="chat_summary_title">聊天總結</string>
+    <string name="chat_summary_loading">正在總結最近訊息…</string>
+    <string name="chat_summary_analyzed">共分析 %1$d 則訊息</string>
+    <string name="chat_summary_speakers">發言人統計</string>
+    <string name="chat_summary_content">內容總結</string>
+    <string name="chat_summary_self">我</string>
+    <string name="chat_summary_peer">對方</string>
+    <string name="chat_summary_unknown">未知</string>
+    <string name="chat_summary_failed">聊天總結失敗：%1$s</string>
+    <string name="chat_summary_no_model">未設定可用的模型，請在 WeAgent 設定中選擇預設模型。</string>
+    <string name="chat_summary_empty">模型回傳了空的總結內容。</string>
+    <string name="chat_summary_tab_analysis">分析報告</string>
+    <string name="chat_summary_tab_summary">智能總結</string>
+    <string name="chat_summary_focus_label">重點關注（可選）</string>
+    <string name="chat_summary_focus_example">例如：大家聊了吃的嗎</string>
+    <string name="chat_summary_generate">✨ 生成完整羣聊總結</string>
+    <string name="chat_summary_regenerate">重新生成</string>
+    <string name="chat_summary_summary_model">總結模型</string>
+    <string name="chat_summary_follow_default">跟隨預設模型</string>
+    <string name="chat_summary_generated_at">生成時間：%1$s</string>
+        <string name="chat_summary_time_range">時間範圍</string>
+    <string name="chat_summary_time_1h">最近 1 小時</string>
+    <string name="chat_summary_time_6h">最近 6 小時</string>
+    <string name="chat_summary_time_12h">最近 12 小時</string>
+    <string name="chat_summary_time_24h">最近 24 小時</string>
+    <string name="chat_summary_time_3d">最近 3 天</string>
+    <string name="chat_summary_time_7d">最近 7 天</string>
+    <string name="chat_summary_time_all">全部訊息</string>
+    <string name="chat_summary_copy">一鍵複製</string>
+    <string name="chat_summary_copied">已複製到剪貼簿</string>
+    <string name="chat_summary_preset_title">預設提示詞</string>
+    <string name="chat_summary_preset_topic">核心話題與結論</string>
+    <string name="chat_summary_preset_action">行動項目與待辦</string>
+    <string name="chat_summary_preset_dispute">爭議與分歧</string>
+    <string name="chat_summary_preset_progress">時間線與進展</string>
+    <string name="chat_summary_not_generated">尚未生成總結，請在上方輸入關注點後點擊生成。</string>
+        <string name="chat_summary_system_prompt">你是一位專業的微信羣聊分析助手。使用者會提供一段聊天記錄，每行格式為「發言人: 訊息內容」。請按以下要點輸出結構化總結：
+1. 開頭用一句話概括本次羣聊的核心主題，如「羣聊總結：……」
+2. 基本統計：參與討論人數、總訊息數、最活躍的發言人。
+3. 話題分析：梳理出 3–5 個主要話題，每個話題簡要說明討論內容與結論。
+4. 關鍵結論：提煉討論中達成的一致結論、待辦事項或分歧點。
+5. 情緒氛圍（可選）：一句話概括整體聊天氛圍。
+要求：使用簡潔凝練的中文，用 Markdown 標題組織，總字數控制在 400 字以內。只輸出總結正文，不要任何額外前綴或說明。</string>
     <plurals name="chat_message_time_days_ago">
         <item quantity="other">%1$d 天前</item>
     </plurals>
