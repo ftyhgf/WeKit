@@ -2309,6 +2309,21 @@
     <string name="chat_summary_summary_model">Summary model</string>
     <string name="chat_summary_follow_default">Follow default model</string>
     <string name="chat_summary_generated_at">Generated at: %1$s</string>
+        <string name="chat_summary_time_range">Time range</string>
+    <string name="chat_summary_time_1h">Last 1 hour</string>
+    <string name="chat_summary_time_6h">Last 6 hours</string>
+    <string name="chat_summary_time_12h">Last 12 hours</string>
+    <string name="chat_summary_time_24h">Last 24 hours</string>
+    <string name="chat_summary_time_3d">Last 3 days</string>
+    <string name="chat_summary_time_7d">Last 7 days</string>
+    <string name="chat_summary_time_all">All messages</string>
+    <string name="chat_summary_copy">Copy</string>
+    <string name="chat_summary_copied">Copied to clipboard</string>
+    <string name="chat_summary_preset_title">Preset prompts</string>
+    <string name="chat_summary_preset_topic">Key topics &amp; conclusions</string>
+    <string name="chat_summary_preset_action">Action items</string>
+    <string name="chat_summary_preset_dispute">Disputes &amp; disagreements</string>
+    <string name="chat_summary_preset_progress">Timeline &amp; progress</string>
     <string name="chat_summary_not_generated">No summary yet. Enter a focus above, then tap generate.</string>
         <string name="chat_summary_system_prompt">You are a professional WeChat group chat analysis assistant. The user will provide a chat transcript where each line is “speaker: message”. Produce a structured summary following this outline:
 1. Opening: one sentence on the core theme, e.g. “Group summary: ...”.

@@ -2264,6 +2264,21 @@
     <string name="chat_summary_summary_model">總結模型</string>
     <string name="chat_summary_follow_default">跟隨預設模型</string>
     <string name="chat_summary_generated_at">生成時間：%1$s</string>
+        <string name="chat_summary_time_range">時間範圍</string>
+    <string name="chat_summary_time_1h">最近 1 小時</string>
+    <string name="chat_summary_time_6h">最近 6 小時</string>
+    <string name="chat_summary_time_12h">最近 12 小時</string>
+    <string name="chat_summary_time_24h">最近 24 小時</string>
+    <string name="chat_summary_time_3d">最近 3 天</string>
+    <string name="chat_summary_time_7d">最近 7 天</string>
+    <string name="chat_summary_time_all">全部訊息</string>
+    <string name="chat_summary_copy">一鍵複製</string>
+    <string name="chat_summary_copied">已複製到剪貼簿</string>
+    <string name="chat_summary_preset_title">預設提示詞</string>
+    <string name="chat_summary_preset_topic">核心話題與結論</string>
+    <string name="chat_summary_preset_action">行動項目與待辦</string>
+    <string name="chat_summary_preset_dispute">爭議與分歧</string>
+    <string name="chat_summary_preset_progress">時間線與進展</string>
     <string name="chat_summary_not_generated">尚未生成總結，請在上方輸入關注點後點擊生成。</string>
         <string name="chat_summary_system_prompt">你是一位專業的微信羣聊分析助手。使用者會提供一段聊天記錄，每行格式為「發言人: 訊息內容」。請按以下要點輸出結構化總結：
 1. 開頭用一句話概括本次羣聊的核心主題，如「羣聊總結：……」

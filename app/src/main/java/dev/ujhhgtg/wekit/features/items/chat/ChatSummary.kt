@@ -63,6 +63,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.text.style.TextOverflow
+import dev.ujhhgtg.wekit.utils.android.copyToClipboard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -82,7 +86,7 @@ object ChatSummary : SwitchFeature(),
     override val categoryIds = listOf(FeatureCategoryIds.CHAT)
     override val descriptionRes = R.string.feature_chat_summary_description
 
-    private const val MAX_MESSAGES = 50
+    private const val MAX_MESSAGES = 500
 
     override fun onEnable() {
         WeChatMessageContextMenuApi.addProvider(this)
@@ -115,6 +119,17 @@ object ChatSummary : SwitchFeature(),
     /** 弹窗内部 Tab。 */
     private enum class SummaryTab { ANALYSIS, SUMMARY }
 
+    /** 消息时间范围：durationMs 为 null 表示不设上限（全部消息）。 */
+    private enum class TimeRange(val labelRes: Int, val durationMs: Long?) {
+        LAST_1H(R.string.chat_summary_time_1h, 1 * 60 * 60 * 1000L),
+        LAST_6H(R.string.chat_summary_time_6h, 6 * 60 * 60 * 1000L),
+        LAST_12H(R.string.chat_summary_time_12h, 12 * 60 * 60 * 1000L),
+        LAST_24H(R.string.chat_summary_time_24h, 24 * 60 * 60 * 1000L),
+        LAST_3D(R.string.chat_summary_time_3d, 3 * 24 * 60 * 60 * 1000L),
+        LAST_7D(R.string.chat_summary_time_7d, 7 * 24 * 60 * 60 * 1000L),
+        ALL(R.string.chat_summary_time_all, null),
+    }
+
     /** 智能总结状态：Idle=未生成 / Loading=生成中 / Success=成功 / Error=失败。 */
     private sealed interface SummaryState {
         data object Idle : SummaryState
@@ -145,10 +160,13 @@ object ChatSummary : SwitchFeature(),
         var summaryModelId by remember { mutableStateOf<String?>(null) }
         var modelOptions by remember { mutableStateOf<List<ModelEntity>>(emptyList()) }
         var modelMenuExpanded by remember { mutableStateOf(false) }
+        // v3: 消息分析时间范围（默认最近 24 小时）
+        var timeRange by remember { mutableStateOf(TimeRange.LAST_24H) }
+        var timeMenuExpanded by remember { mutableStateOf(false) }
 
-        LaunchedEffect(convId) {
+        LaunchedEffect(convId, timeRange) {
             analysis = withContext(Dispatchers.IO) {
-                analyzeConversation(context, convId)
+                analyzeConversation(context, convId, timeRange)
             }
             val models = WeAgentRepository.getAllModelsOnce()
             modelOptions = models
@@ -205,6 +223,14 @@ object ChatSummary : SwitchFeature(),
                         Spacer(Modifier.height(8.dp))
                     }
 
+                    TimeRangeRow(
+                        selected = timeRange,
+                        expanded = timeMenuExpanded,
+                        onExpandedChange = { timeMenuExpanded = it },
+                        onSelect = { timeRange = it },
+                    )
+                    Spacer(Modifier.height(8.dp))
+
                     if (selectedTab == SummaryTab.SUMMARY) {
                         OutlinedTextField(
                             value = focus,
@@ -220,6 +246,8 @@ object ChatSummary : SwitchFeature(),
                             minLines = 1,
                             maxLines = 2,
                         )
+                        Spacer(Modifier.height(8.dp))
+                        PresetPromptRow { focus = it }
                         Spacer(Modifier.height(8.dp))
                         Button(
                             onClick = { requestSummary() },
@@ -369,10 +397,50 @@ object ChatSummary : SwitchFeature(),
                 }
                 return@LazyColumn
             }
+            val maxCount = analysis.stats.maxOf { it.second }.coerceAtLeast(1)
             items(analysis.stats.size) { i ->
                 val (speaker, count) = analysis.stats[i]
-                Text(text = "${i + 1}. $speaker  \u00d7 $count")
+                SpeakerBarRow(speaker, count, maxCount)
             }
+        }
+    }
+
+    /** 发言人横向柱状图单行（v3：占比可视化）。 */
+    @Composable
+    private fun SpeakerBarRow(speaker: String, count: Int, maxCount: Int) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = speaker,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.width(96.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(14.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(7.dp)),
+            ) {
+                val fraction = count.toFloat() / maxCount
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction)
+                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(7.dp)),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "\u00d7 $count",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 
@@ -395,17 +463,39 @@ object ChatSummary : SwitchFeature(),
                 }
                 is SummaryState.Success -> {
                     item {
-                        Text(
-                            text = state.summary,
-                            modifier = Modifier.padding(bottom = 6.dp),
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                        ) {
+                            Text(
+                                text = state.summary,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = context.localizedChatString(R.string.chat_summary_generated_at, state.generatedAt),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     item {
-                        Text(
-                            text = context.localizedChatString(R.string.chat_summary_generated_at, state.generatedAt),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        var copied by remember { mutableStateOf(false) }
+                        Button(
+                            onClick = {
+                                copyToClipboard(context, state.summary)
+                                copied = true
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                context.localizedChatString(
+                                    if (copied) R.string.chat_summary_copied else R.string.chat_summary_copy
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -413,8 +503,13 @@ object ChatSummary : SwitchFeature(),
     }
 
     /** 读取最近消息并本地统计发言人，构建分析与转写文本（不调用模型）。 */
-    private suspend fun analyzeConversation(context: Context, convId: String): ConversationAnalysis {
-        val messages = WeDatabaseApi.getMessages(convId, 1, MAX_MESSAGES)
+    private suspend fun analyzeConversation(
+        context: Context,
+        convId: String,
+        timeRange: TimeRange,
+    ): ConversationAnalysis {
+        val since = timeRange.durationMs?.let { System.currentTimeMillis() - it } ?: 0L
+        val messages = WeDatabaseApi.getMessagesSince(convId, since, MAX_MESSAGES)
         if (messages.isEmpty()) {
             return ConversationAnalysis(emptyList(), 0, "")
         }
@@ -431,10 +526,11 @@ object ChatSummary : SwitchFeature(),
     }
 
     /**
-     * 发言人以昵称展示（需求：不使用 id）：
+     * 发言人展示逻辑（v3：备注 > 昵称 > 不显示 id）：
      *  - 自己发的消息 →「我」
      *  - 单聊对方 →「对方」
-     *  - 群聊 → 优先取群成员备注/昵称，回退到联系人昵称，最后兜底返回原始 wxid。
+     *  - 群聊 → 优先群内备注（群昵称），其次联系人备注，再回退联系人昵称，兜底显示「未知」。
+     * 绝不展示原始 wxid。
      */
     private fun resolveSpeaker(context: Context, msg: WeMessage, convId: String, isGroup: Boolean): String {
         if (msg.isSend != 0) return context.localizedChatString(R.string.chat_summary_self)
@@ -445,16 +541,19 @@ object ChatSummary : SwitchFeature(),
         if (senderId.isNullOrBlank()) {
             return context.localizedChatString(R.string.chat_summary_unknown)
         }
+        // 1) 群内备注（群昵称）优先
         runCatching {
             val memberName = WeDatabaseApi.getGroupMemberDisplayName(convId, senderId)
             if (!memberName.isNullOrBlank()) return memberName
         }
+        // 2) 联系人备注 → 3) 联系人昵称；绝不回退到 wxid
         runCatching {
             WeDatabaseApi.getFriend(senderId)?.let { friend ->
+                if (friend.remarkName.isNotBlank()) return friend.remarkName
                 if (friend.nickname.isNotBlank()) return friend.nickname
             }
         }
-        return senderId
+        return context.localizedChatString(R.string.chat_summary_unknown)
     }
 
     private fun displayText(context: Context, msg: WeMessage, isGroup: Boolean): String {
@@ -520,5 +619,84 @@ object ChatSummary : SwitchFeature(),
             throw IllegalStateException(context.localizedChatString(R.string.chat_summary_empty))
         }
         return text
+    }
+
+    /** 消息时间范围选择行（v3：自定义分析范围）。 */
+    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+    @Composable
+    private fun TimeRangeRow(
+        selected: TimeRange,
+        expanded: Boolean,
+        onExpandedChange: (Boolean) -> Unit,
+        onSelect: (TimeRange) -> Unit,
+    ) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val options = TimeRange.entries.map { range ->
+            DropdownOption<TimeRange>(range, context.localizedChatString(range.labelRes))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = context.localizedChatString(R.string.chat_summary_time_range),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(Modifier.width(8.dp))
+            Box {
+                Text(
+                    text = "\u25bc " + context.localizedChatString(selected.labelRes),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable { onExpandedChange(!expanded) }
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                )
+                ExpressiveOptionDropdown(
+                    expanded = expanded,
+                    value = selected,
+                    options = options,
+                    onDismissRequest = { onExpandedChange(false) },
+                    onValueChange = { onSelect(it) },
+                )
+            }
+        }
+    }
+
+    /** 预设提示词快捷入口（v3：一键填入关注点）。 */
+    @Composable
+    private fun PresetPromptRow(onPick: (String) -> Unit) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val presets = listOf(
+            context.localizedChatString(R.string.chat_summary_preset_topic),
+            context.localizedChatString(R.string.chat_summary_preset_action),
+            context.localizedChatString(R.string.chat_summary_preset_dispute),
+            context.localizedChatString(R.string.chat_summary_preset_progress),
+        )
+        Column(Modifier.fillMaxWidth()) {
+            Text(
+                text = context.localizedChatString(R.string.chat_summary_preset_title),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(6.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(presets) { preset ->
+                    Box(
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                            .clickable { onPick(preset) }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                    ) {
+                        Text(
+                            text = preset,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
     }
 }

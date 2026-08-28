@@ -2269,6 +2269,21 @@
     <string name="chat_summary_summary_model">总结模型</string>
     <string name="chat_summary_follow_default">跟随默认模型</string>
     <string name="chat_summary_generated_at">生成时间：%1$s</string>
+        <string name="chat_summary_time_range">时间范围</string>
+    <string name="chat_summary_time_1h">最近 1 小时</string>
+    <string name="chat_summary_time_6h">最近 6 小时</string>
+    <string name="chat_summary_time_12h">最近 12 小时</string>
+    <string name="chat_summary_time_24h">最近 24 小时</string>
+    <string name="chat_summary_time_3d">最近 3 天</string>
+    <string name="chat_summary_time_7d">最近 7 天</string>
+    <string name="chat_summary_time_all">全部消息</string>
+    <string name="chat_summary_copy">一键复制</string>
+    <string name="chat_summary_copied">已复制到剪贴板</string>
+    <string name="chat_summary_preset_title">预设提示词</string>
+    <string name="chat_summary_preset_topic">核心话题与结论</string>
+    <string name="chat_summary_preset_action">行动项与待办</string>
+    <string name="chat_summary_preset_dispute">争议与分歧</string>
+    <string name="chat_summary_preset_progress">时间线与进展</string>
     <string name="chat_summary_not_generated">尚未生成总结，请在上方输入关注点后点击生成。</string>
         <string name="chat_summary_system_prompt">你是一位专业的微信群聊分析助手。用户会提供一段聊天记录，每行格式为“发言人: 消息内容”。请按以下要点输出结构化总结：
 1. 开头用一句话概括本次群聊的核心主题，如“群聊总结：……”。
