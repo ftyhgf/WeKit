@@ -303,10 +303,10 @@ object ChatSummary : SwitchFeature(),
         onSelect: (String?) -> Unit,
     ) {
         val context = androidx.compose.ui.platform.LocalContext.current
-        val options = buildList {
+        val options = buildList<DropdownOption<String?>> {
             add(DropdownOption<String?>(null, context.localizedChatString(R.string.chat_summary_follow_default)))
             modelOptions.forEach { m ->
-                add(DropdownOption(m.id, m.displayName.ifBlank { m.modelIdRemote }))
+                add(DropdownOption<String?>(m.id, m.displayName.ifBlank { m.modelIdRemote }))
             }
         }
         val currentLabel = if (selectedModelId == null) {
