@@ -269,6 +269,22 @@ object WeDatabaseApi : ApiFeature(), IResolveDex {
             LIMIT $limit
         """.trimIndent()
 
+        /** 按时间范围获取【全部】消息（v4：不限条数） */
+        fun messagesSinceAll(wxid: String, sinceTime: Long) = """
+            SELECT msgId, msgSvrId, talker, content, type, createTime, isSend
+            FROM message
+            WHERE talker='$wxid' AND createTime >= $sinceTime
+            ORDER BY createTime DESC
+        """.trimIndent()
+
+        /** 获取该会话【全部】消息（v4：不限条数） */
+        fun messagesAll(wxid: String) = """
+            SELECT msgId, msgSvrId, talker, content, type, createTime, isSend
+            FROM message
+            WHERE talker='$wxid'
+            ORDER BY createTime DESC
+        """.trimIndent()
+
         /**
          * 获取指定会话中特定发送者的消息
          * 支持群聊（通过 content 匹配对方，或通过 isSend 匹配自己）与单聊
@@ -606,6 +622,38 @@ object WeDatabaseApi : ApiFeature(), IResolveDex {
     }
 
     /**
+     * 获取群成员的【显示名映射】（v4 新增）
+     * 群聊总结专用：一次性构建「成员 wxid / 自定义微信号 alias -> 显示名」映射，
+     * 显示名优先级：联系人备注 > 微信昵称。覆盖全部群成员（含非好友），不受好友过滤限制。
+     * @param groupId 群聊 wxId（xxx@chatroom）
+     * @return 映射；群信息缺失或非群聊时返回空 Map
+     */
+    fun getGroupDisplayNameMap(groupId: String): Map<String, String> {
+        if (!groupId.isGroupChatWxId) return emptyMap()
+        val roomSql = SqlStatements.GROUP_MEMBERS.format(groupId)
+        val roomResult = executeQuery(roomSql)
+        if (roomResult.isEmpty()) return emptyMap()
+
+        val memberListStr = roomResult[0].str("memberlist")
+        if (memberListStr.isEmpty()) return emptyMap()
+
+        val members = memberListStr.split(";").filter { it.isNotEmpty() }
+        if (members.isEmpty()) return emptyMap()
+
+        val idsStr = members.joinToString(",") { "'${it.replace("'", "''")}'" }
+        val contacts = mapToContacts(executeQuery(SqlStatements.groupMembers(idsStr)))
+
+        val map = HashMap<String, String>(contacts.size * 2)
+        for (c in contacts) {
+            val displayName = c.remarkName.ifBlank { c.nickname }.ifBlank { continue }
+            map[c.wxId] = displayName
+            // 自定义微信号也可能出现在消息前缀中，一并映射
+            if (c.customWxId.isNotBlank()) map[c.customWxId] = displayName
+        }
+        return map
+    }
+
+    /**
      * 获取群成员在群中的群昵称（群备注）
      * 数据来自 chatroom.roomdata protobuf，没有设置群昵称时返回空字符串
      * @param groupId 群聊 wxId（xxx@chatroom）
@@ -694,16 +742,17 @@ object WeDatabaseApi : ApiFeature(), IResolveDex {
     /**
      * 获取指定会话中【指定时间范围】内的消息（v3：聊天总结自定义时间范围）
      * @param convId 会话 ID（单聊为对方 wxid，群聊为 xxx@chatroom）
-     * @param sinceTime 起始时间（毫秒时间戳），0 或负数表示不限时间（取最近 limit 条）
-     * @param limit 最大返回条数
+     * @param sinceTime 起始时间（毫秒时间戳），0 或负数表示不限时间（取该会话全部消息）
+     * @param limit 最大返回条数；v4：<= 0 表示不限条数，数据库有多少取多少
      */
-    fun getMessagesSince(convId: String, sinceTime: Long, limit: Int = 500): List<WeMessage> {
+    fun getMessagesSince(convId: String, sinceTime: Long, limit: Int = -1): List<WeMessage> {
         if (convId.isEmpty()) return emptyList()
         val since = sinceTime.coerceAtLeast(0L)
-        val sql = if (since > 0L) {
-            SqlStatements.messagesSince(convId, since, limit)
-        } else {
-            SqlStatements.messages(convId, limit, 0)
+        val sql = when {
+            since > 0L && limit > 0 -> SqlStatements.messagesSince(convId, since, limit)
+            since > 0L -> SqlStatements.messagesSinceAll(convId, since)
+            limit > 0 -> SqlStatements.messages(convId, limit, 0)
+            else -> SqlStatements.messagesAll(convId)
         }
         return executeQuery(sql).map { row ->
             WeMessage(
