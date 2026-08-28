@@ -72,11 +72,12 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 聊天自动总结：长按任意消息，从菜单发起对当前会话最近消息的总结。
+ * 聊天自动总结：长按任意消息，从菜单发起对当前会话消息的总结。
  *
- * 读取最近 [MAX_MESSAGES] 条消息，本地统计各发言人消息条数（分析报告），再调用 WeAgent
- * 配置的模型（默认跟随全局默认模型，群聊可在弹窗内单独指定总结模型）生成结构化总结
- * （智能总结），最终以 Compose 弹窗卡片呈现。弹窗内分析与总结分为两个 Tab。
+ * 读取该会话（时间范围内）的【全部】消息（不设条数上限，数据库有多少取多少），本地统计
+ * 各发言人消息条数（分析报告），再调用 WeAgent 配置的模型（默认跟随全局默认模型，群聊可
+ * 在弹窗内单独指定总结模型）生成结构化总结（智能总结），最终以 Compose 弹窗卡片呈现。
+ * 弹窗内分析与总结分为两个 Tab。
  */
 object ChatSummary : SwitchFeature(),
     WeChatMessageContextMenuApi.IMenuItemsProvider {
@@ -86,7 +87,8 @@ object ChatSummary : SwitchFeature(),
     override val categoryIds = listOf(FeatureCategoryIds.CHAT)
     override val descriptionRes = R.string.feature_chat_summary_description
 
-    private const val MAX_MESSAGES = 500
+    // v4：消息条数不设上限——getMessagesSince 传 limit<=0 时读取数据库该会话的全部消息。
+    // 移除 v3 的 MAX_MESSAGES=500 固定上限，数据库有多少就分析多少。
 
     override fun onEnable() {
         WeChatMessageContextMenuApi.addProvider(this)
@@ -502,22 +504,30 @@ object ChatSummary : SwitchFeature(),
         }
     }
 
-    /** 读取最近消息并本地统计发言人，构建分析与转写文本（不调用模型）。 */
+    /** 读取时间范围内的全部消息并本地统计发言人，构建分析与转写文本（不调用模型）。 */
     private suspend fun analyzeConversation(
         context: Context,
         convId: String,
         timeRange: TimeRange,
     ): ConversationAnalysis {
         val since = timeRange.durationMs?.let { System.currentTimeMillis() - it } ?: 0L
-        val messages = WeDatabaseApi.getMessagesSince(convId, since, MAX_MESSAGES)
+        // v4：limit<=0 表示不限条数，数据库有多少取多少
+        val messages = WeDatabaseApi.getMessagesSince(convId, since, limit = -1)
         if (messages.isEmpty()) {
             return ConversationAnalysis(emptyList(), 0, "")
         }
         val stats = LinkedHashMap<String, Int>()
         val transcript = StringBuilder()
         val isGroup = convId.isGroupChatWxId
+        // v4：群聊一次性预加载「群成员 -> 显示名」映射（含备注/昵称，无好友过滤），
+        // 避免逐条查询联系人导致大量成员解析为「未知」。
+        val speakerMap = if (isGroup) {
+            WeDatabaseApi.getGroupDisplayNameMap(convId)
+        } else {
+            emptyMap()
+        }
         for (msg in messages) {
-            val speaker = resolveSpeaker(context, msg, convId, isGroup)
+            val speaker = resolveSpeaker(context, msg, isGroup, speakerMap)
             stats[speaker] = (stats[speaker] ?: 0) + 1
             transcript.append(speaker).append(": ").append(displayText(context, msg, isGroup)).append('\n')
         }
@@ -526,34 +536,29 @@ object ChatSummary : SwitchFeature(),
     }
 
     /**
-     * 发言人展示逻辑（v3：备注 > 昵称 > 不显示 id）：
+     * 发言人展示逻辑（v4：群成员映射直查）：
      *  - 自己发的消息 →「我」
      *  - 单聊对方 →「对方」
-     *  - 群聊 → 优先群内备注（群昵称），其次联系人备注，再回退联系人昵称，兜底显示「未知」。
+     *  - 群聊 → 从消息前缀提取发送者 wxid/微信号，在【全量群成员映射】（备注优先、昵称兜底，
+     *    同时覆盖 wxid 与自定义微信号 alias，不受"是否好友"限制）中查显示名，查不到才兜底「未知」。
      * 绝不展示原始 wxid。
      */
-    private fun resolveSpeaker(context: Context, msg: WeMessage, convId: String, isGroup: Boolean): String {
+    private fun resolveSpeaker(
+        context: Context,
+        msg: WeMessage,
+        isGroup: Boolean,
+        speakerMap: Map<String, String>,
+    ): String {
         if (msg.isSend != 0) return context.localizedChatString(R.string.chat_summary_self)
         if (!isGroup) return context.localizedChatString(R.string.chat_summary_peer)
-        // 群聊消息存储格式：发送者 wxid 后跟冒号换行，再接正文。
+        // 群聊消息存储格式：发送者 wxid/微信号 后跟冒号换行，再接正文。
         val senderId = msg.content.substringBefore(':')
+            .trim()
             .takeIf { it.isNotBlank() && it.length <= 64 }
         if (senderId.isNullOrBlank()) {
             return context.localizedChatString(R.string.chat_summary_unknown)
         }
-        // 1) 群内备注（群昵称）优先
-        runCatching {
-            val memberName = WeDatabaseApi.getGroupMemberDisplayName(convId, senderId)
-            if (!memberName.isNullOrBlank()) return memberName
-        }
-        // 2) 联系人备注 → 3) 联系人昵称；绝不回退到 wxid
-        runCatching {
-            WeDatabaseApi.getFriend(senderId)?.let { friend ->
-                if (friend.remarkName.isNotBlank()) return friend.remarkName
-                if (friend.nickname.isNotBlank()) return friend.nickname
-            }
-        }
-        return context.localizedChatString(R.string.chat_summary_unknown)
+        return speakerMap[senderId] ?: context.localizedChatString(R.string.chat_summary_unknown)
     }
 
     private fun displayText(context: Context, msg: WeMessage, isGroup: Boolean): String {
