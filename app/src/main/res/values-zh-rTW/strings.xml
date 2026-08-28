@@ -2255,7 +2255,23 @@
     <string name="chat_summary_failed">聊天總結失敗：%1$s</string>
     <string name="chat_summary_no_model">未設定可用的模型，請在 WeAgent 設定中選擇預設模型。</string>
     <string name="chat_summary_empty">模型回傳了空的總結內容。</string>
-    <string name="chat_summary_system_prompt">你是一個得力的助手。使用者會提供一段微信聊天記錄，每行格式為「發言人: 訊息內容」。請用簡潔的中文概括這段對話的核心話題、討論要點與結論，不超過 300 字。只輸出總結本身，不要任何前綴、標籤或格式標記。</string>
+    <string name="chat_summary_tab_analysis">分析報告</string>
+    <string name="chat_summary_tab_summary">智能總結</string>
+    <string name="chat_summary_focus_label">重點關注（可選）</string>
+    <string name="chat_summary_focus_example">例如：大家聊了吃的嗎</string>
+    <string name="chat_summary_generate">✨ 生成完整羣聊總結</string>
+    <string name="chat_summary_regenerate">重新生成</string>
+    <string name="chat_summary_summary_model">總結模型</string>
+    <string name="chat_summary_follow_default">跟隨預設模型</string>
+    <string name="chat_summary_generated_at">生成時間：%1$s</string>
+    <string name="chat_summary_not_generated">尚未生成總結，請在上方輸入關注點後點擊生成。</string>
+        <string name="chat_summary_system_prompt">你是一位專業的微信羣聊分析助手。使用者會提供一段聊天記錄，每行格式為「發言人: 訊息內容」。請按以下要點輸出結構化總結：
+1. 開頭用一句話概括本次羣聊的核心主題，如「羣聊總結：……」
+2. 基本統計：參與討論人數、總訊息數、最活躍的發言人。
+3. 話題分析：梳理出 3–5 個主要話題，每個話題簡要說明討論內容與結論。
+4. 關鍵結論：提煉討論中達成的一致結論、待辦事項或分歧點。
+5. 情緒氛圍（可選）：一句話概括整體聊天氛圍。
+要求：使用簡潔凝練的中文，用 Markdown 標題組織，總字數控制在 400 字以內。只輸出總結正文，不要任何額外前綴或說明。</string>
     <plurals name="chat_message_time_days_ago">
         <item quantity="other">%1$d 天前</item>
     </plurals>

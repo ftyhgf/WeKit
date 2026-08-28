@@ -1,26 +1,43 @@
 package dev.ujhhgtg.wekit.features.items.chat
 
 import android.content.Context
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Summarize
 import dev.ujhhgtg.wekit.R
 import dev.ujhhgtg.wekit.agent.data.WeAgentRepository
 import dev.ujhhgtg.wekit.agent.data.WeAgentSettings
+import dev.ujhhgtg.wekit.agent.data.entity.ModelEntity
 import dev.ujhhgtg.wekit.agent.data.entity.ModelProviderType
 import dev.ujhhgtg.wekit.agent.model.LlmMessage
 import dev.ujhhgtg.wekit.agent.model.LlmRole
@@ -37,18 +54,25 @@ import dev.ujhhgtg.wekit.features.core.FeatureCategoryIds
 import dev.ujhhgtg.wekit.features.core.SwitchFeature
 import dev.ujhhgtg.wekit.ui.content.AlertDialogContent
 import dev.ujhhgtg.wekit.ui.content.Button
+import dev.ujhhgtg.wekit.ui.content.m3.DropdownOption
+import dev.ujhhgtg.wekit.ui.content.m3.ExpressiveOptionDropdown
 import dev.ujhhgtg.wekit.ui.utils.ChatInfoIcon
 import dev.ujhhgtg.wekit.ui.utils.showComposeDialog
 import dev.ujhhgtg.wekit.utils.strings.isGroupChatWxId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 聊天自动总结：长按任意消息，从菜单发起对当前会话最近消息的总结。
  *
- * 读取最近 [MAX_MESSAGES] 条消息，本地统计各发言人消息条数，再调用 WeAgent 配置的
- * 默认模型（云端或本地均可）生成一段内容总结，最终以 Compose 弹窗卡片呈现。
+ * 读取最近 [MAX_MESSAGES] 条消息，本地统计各发言人消息条数（分析报告），再调用 WeAgent
+ * 配置的模型（默认跟随全局默认模型，群聊可在弹窗内单独指定总结模型）生成结构化总结
+ * （智能总结），最终以 Compose 弹窗卡片呈现。弹窗内分析与总结分为两个 Tab。
  */
 object ChatSummary : SwitchFeature(),
     WeChatMessageContextMenuApi.IMenuItemsProvider {
@@ -88,82 +112,311 @@ object ChatSummary : SwitchFeature(),
         )
     }
 
-    private sealed interface SummaryUiState {
-        data object Loading : SummaryUiState
-        data class Success(
-            val stats: List<Pair<String, Int>>,
-            val total: Int,
-            val summary: String,
-        ) : SummaryUiState
+    /** 弹窗内部 Tab。 */
+    private enum class SummaryTab { ANALYSIS, SUMMARY }
 
-        data class Error(val message: String) : SummaryUiState
+    /** 智能总结状态：Idle=未生成 / Loading=生成中 / Success=成功 / Error=失败。 */
+    private sealed interface SummaryState {
+        data object Idle : SummaryState
+        data object Loading : SummaryState
+        data class Success(val summary: String, val generatedAt: String) : SummaryState
+        data class Error(val message: String) : SummaryState
     }
 
+    /** 本地分析结果（发言人统计 + 供模型使用的转写文本）。 */
+    private data class ConversationAnalysis(
+        val stats: List<Pair<String, Int>>,
+        val total: Int,
+        val transcript: String,
+    )
+
+    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
     @Composable
     private fun SummaryDialogContent(convId: String, onDismiss: () -> Unit) {
         val context = androidx.compose.ui.platform.LocalContext.current
-        var state by remember { mutableStateOf<SummaryUiState>(SummaryUiState.Loading) }
+        val scope = rememberCoroutineScope()
+        val isGroup = convId.isGroupChatWxId
+
+        var analysis by remember { mutableStateOf<ConversationAnalysis?>(null) }
+        var summaryState by remember { mutableStateOf<SummaryState>(SummaryState.Idle) }
+        var selectedTab by remember { mutableStateOf(SummaryTab.ANALYSIS) }
+        var focus by remember { mutableStateOf("") }
+        // 群聊总结专用模型 id，null = 跟随全局默认模型。
+        var summaryModelId by remember { mutableStateOf<String?>(null) }
+        var modelOptions by remember { mutableStateOf<List<ModelEntity>>(emptyList()) }
+        var modelMenuExpanded by remember { mutableStateOf(false) }
+
         LaunchedEffect(convId) {
-            state = runCatching {
-                withContext(Dispatchers.IO) { buildSummary(context, convId) }
-            }.fold(
-                onSuccess = { it },
-                onFailure = { e ->
-                    SummaryUiState.Error(e.message ?: context.localizedChatString(R.string.chat_summary_failed, e.javaClass.simpleName))
-                }
-            )
+            analysis = withContext(Dispatchers.IO) {
+                analyzeConversation(context, convId)
+            }
+            val models = WeAgentRepository.getAllModelsOnce()
+            modelOptions = models
+            summaryModelId = WeAgentSettings.chatSummaryModelId()
         }
+
+        fun requestSummary() {
+            val a = analysis ?: return
+            scope.launch {
+                summaryState = SummaryState.Loading
+                selectedTab = SummaryTab.SUMMARY
+                summaryState = runCatching {
+                    withContext(Dispatchers.IO) {
+                        generateSummary(context, a.transcript, focus, summaryModelId)
+                    }
+                }.fold(
+                    onSuccess = { text ->
+                        val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                            .format(Date())
+                        SummaryState.Success(text, stamp)
+                    },
+                    onFailure = { e ->
+                        SummaryState.Error(
+                            e.message
+                                ?: context.localizedChatString(R.string.chat_summary_failed, e.javaClass.simpleName)
+                        )
+                    },
+                )
+            }
+        }
+
         AlertDialogContent(
             title = { Text(stringResource(R.string.chat_summary_title)) },
             text = {
-                when (val s = state) {
-                    SummaryUiState.Loading -> Text(stringResource(R.string.chat_summary_loading))
-                    is SummaryUiState.Error -> Text(s.message)
-                    is SummaryUiState.Success -> SummaryContent(s)
+                Column(Modifier.fillMaxWidth()) {
+                    TabRow(
+                        selected = selectedTab,
+                        onSelect = { selectedTab = it },
+                    )
+                    Spacer(Modifier.height(10.dp))
+
+                    if (isGroup) {
+                        ModelPickerRow(
+                            modelOptions = modelOptions,
+                            selectedModelId = summaryModelId,
+                            expanded = modelMenuExpanded,
+                            onExpandedChange = { modelMenuExpanded = it },
+                            onSelect = { id ->
+                                summaryModelId = id
+                                modelMenuExpanded = false
+                                scope.launch { WeAgentSettings.setChatSummaryModelId(id) }
+                            },
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    if (selectedTab == SummaryTab.SUMMARY) {
+                        OutlinedTextField(
+                            value = focus,
+                            onValueChange = { focus = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = {
+                                Text(
+                                    context.localizedChatString(R.string.chat_summary_focus_example)
+                                )
+                            },
+                            label = { Text(context.localizedChatString(R.string.chat_summary_focus_label)) },
+                            singleLine = false,
+                            minLines = 1,
+                            maxLines = 2,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = { requestSummary() },
+                            enabled = summaryState !is SummaryState.Loading,
+                        ) {
+                            Text(
+                                context.localizedChatString(
+                                    if (summaryState is SummaryState.Success) R.string.chat_summary_regenerate
+                                    else R.string.chat_summary_generate
+                                )
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    when (val tab = selectedTab) {
+                        SummaryTab.ANALYSIS -> AnalysisContent(analysis)
+                        SummaryTab.SUMMARY -> SummaryContent(summaryState)
+                    }
                 }
             },
             confirmButton = { Button(onDismiss) { Text(stringResource(R.string.dialog_close)) } }
         )
     }
 
+    /** 顶部「分析报告 / 智能总结」Tab 切换条。 */
     @Composable
-    private fun SummaryContent(state: SummaryUiState.Success) {
-        LazyColumn {
-            item {
-                Text(
-                    text = stringResource(R.string.chat_summary_analyzed, state.total),
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
+    private fun TabRow(selected: SummaryTab, onSelect: (SummaryTab) -> Unit) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TabItem(
+                label = stringResource(R.string.chat_summary_tab_analysis),
+                selected = selected == SummaryTab.ANALYSIS,
+                onClick = { onSelect(SummaryTab.ANALYSIS) },
+                modifier = Modifier.weight(1f),
+            )
+            TabItem(
+                label = stringResource(R.string.chat_summary_tab_summary),
+                selected = selected == SummaryTab.SUMMARY,
+                onClick = { onSelect(SummaryTab.SUMMARY) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+
+    @Composable
+    private fun androidx.compose.foundation.layout.RowScope.TabItem(
+        label: String,
+        selected: Boolean,
+        onClick: () -> Unit,
+        modifier: Modifier = Modifier,
+    ) {
+        val shape = RoundedCornerShape(10.dp)
+        val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+        val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+        Box(
+            modifier = modifier
+                .background(bg, shape)
+                .clickable(onClick = onClick)
+                .padding(vertical = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                color = fg,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            )
+        }
+    }
+
+    /** 群聊总结专用模型选择下拉（需求：群聊总结单独设置模型）。 */
+    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+    @Composable
+    private fun ModelPickerRow(
+        modelOptions: List<ModelEntity>,
+        selectedModelId: String?,
+        expanded: Boolean,
+        onExpandedChange: (Boolean) -> Unit,
+        onSelect: (String?) -> Unit,
+    ) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val options = buildList {
+            add(DropdownOption<String?>(null, context.localizedChatString(R.string.chat_summary_follow_default)))
+            modelOptions.forEach { m ->
+                add(DropdownOption(m.id, m.displayName.ifBlank { m.modelIdRemote }))
             }
-            item {
+        }
+        val currentLabel = if (selectedModelId == null) {
+            context.localizedChatString(R.string.chat_summary_follow_default)
+        } else {
+            modelOptions.firstOrNull { it.id == selectedModelId }
+                ?.let { it.displayName.ifBlank { it.modelIdRemote } }
+                ?: context.localizedChatString(R.string.chat_summary_follow_default)
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = context.localizedChatString(R.string.chat_summary_summary_model),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(Modifier.width(8.dp))
+            Box {
                 Text(
-                    text = stringResource(R.string.chat_summary_speakers),
-                    modifier = Modifier.padding(bottom = 4.dp),
+                    text = "▼ $currentLabel",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable { onExpandedChange(!expanded) }
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
                 )
-            }
-            items(state.stats.size) { i ->
-                val (speaker, count) = state.stats[i]
-                Text(text = "\u2022 $speaker  \u00d7 $count")
-            }
-            item {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.chat_summary_content),
-                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                ExpressiveOptionDropdown(
+                    expanded = expanded,
+                    value = selectedModelId,
+                    options = options,
+                    onDismissRequest = { onExpandedChange(false) },
+                    onValueChange = { onSelect(it) },
                 )
-                Text(text = state.summary)
             }
         }
     }
 
-    private suspend fun buildSummary(context: Context, convId: String): SummaryUiState.Success {
+    /** 分析报告 Tab：发言人统计列表。 */
+    @Composable
+    private fun AnalysisContent(analysis: ConversationAnalysis?) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        LazyColumn(Modifier.heightIn(max = 340.dp)) {
+            if (analysis == null) {
+                item { Text(stringResource(R.string.chat_summary_loading)) }
+                return@LazyColumn
+            }
+            item {
+                Text(
+                    text = stringResource(R.string.chat_summary_analyzed, analysis.total),
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
+            if (analysis.stats.isEmpty()) {
+                item {
+                    Text(
+                        text = context.localizedChatString(R.string.chat_summary_no_messages),
+                    )
+                }
+                return@LazyColumn
+            }
+            items(analysis.stats.size) { i ->
+                val (speaker, count) = analysis.stats[i]
+                Text(text = "${i + 1}. $speaker  \u00d7 $count")
+            }
+        }
+    }
+
+    /** 智能总结 Tab：总结正文 + 生成时间。 */
+    @Composable
+    private fun SummaryContent(state: SummaryState) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        LazyColumn(Modifier.heightIn(max = 340.dp)) {
+            when (state) {
+                SummaryState.Idle -> {
+                    item {
+                        Text(context.localizedChatString(R.string.chat_summary_not_generated))
+                    }
+                }
+                SummaryState.Loading -> {
+                    item { Text(stringResource(R.string.chat_summary_loading)) }
+                }
+                is SummaryState.Error -> {
+                    item { Text(state.message) }
+                }
+                is SummaryState.Success -> {
+                    item {
+                        Text(
+                            text = state.summary,
+                            modifier = Modifier.padding(bottom = 6.dp),
+                        )
+                    }
+                    item {
+                        Text(
+                            text = context.localizedChatString(R.string.chat_summary_generated_at, state.generatedAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /** 读取最近消息并本地统计发言人，构建分析与转写文本（不调用模型）。 */
+    private suspend fun analyzeConversation(context: Context, convId: String): ConversationAnalysis {
         val messages = WeDatabaseApi.getMessages(convId, 1, MAX_MESSAGES)
         if (messages.isEmpty()) {
-            return SummaryUiState.Success(
-                stats = emptyList(),
-                total = 0,
-                summary = context.localizedChatString(R.string.chat_summary_no_messages),
-            )
+            return ConversationAnalysis(emptyList(), 0, "")
         }
         val stats = LinkedHashMap<String, Int>()
         val transcript = StringBuilder()
@@ -173,21 +426,35 @@ object ChatSummary : SwitchFeature(),
             stats[speaker] = (stats[speaker] ?: 0) + 1
             transcript.append(speaker).append(": ").append(displayText(context, msg, isGroup)).append('\n')
         }
-        val summary = generateSummary(context, transcript.toString())
-        return SummaryUiState.Success(
-            stats = stats.entries.map { it.key to it.value },
-            total = messages.size,
-            summary = summary,
-        )
+        val sorted = stats.entries.sortedByDescending { it.value }.map { it.key to it.value }
+        return ConversationAnalysis(sorted, messages.size, transcript.toString())
     }
 
+    /**
+     * 发言人以昵称展示（需求：不使用 id）：
+     *  - 自己发的消息 →「我」
+     *  - 单聊对方 →「对方」
+     *  - 群聊 → 优先取群成员备注/昵称，回退到联系人昵称，最后兜底返回原始 wxid。
+     */
     private fun resolveSpeaker(context: Context, msg: WeMessage, convId: String, isGroup: Boolean): String {
         if (msg.isSend != 0) return context.localizedChatString(R.string.chat_summary_self)
         if (!isGroup) return context.localizedChatString(R.string.chat_summary_peer)
         // 群聊消息存储格式：发送者 wxid 后跟冒号换行，再接正文。
-        val prefix = msg.content.substringBefore(':')
-        return prefix.takeIf { it.isNotBlank() && it.length <= 64 }
-            ?: context.localizedChatString(R.string.chat_summary_unknown)
+        val senderId = msg.content.substringBefore(':')
+            .takeIf { it.isNotBlank() && it.length <= 64 }
+        if (senderId.isNullOrBlank()) {
+            return context.localizedChatString(R.string.chat_summary_unknown)
+        }
+        runCatching {
+            val memberName = WeDatabaseApi.getGroupMemberDisplayName(convId, senderId)
+            if (!memberName.isNullOrBlank()) return memberName
+        }
+        runCatching {
+            WeDatabaseApi.getFriend(senderId)?.let { friend ->
+                if (friend.nickname.isNotBlank()) return friend.nickname
+            }
+        }
+        return senderId
     }
 
     private fun displayText(context: Context, msg: WeMessage, isGroup: Boolean): String {
@@ -202,8 +469,19 @@ object ChatSummary : SwitchFeature(),
         return "[${type?.let { context.localizedChatString(it.displayNameRes) } ?: "?"}]"
     }
 
-    private suspend fun generateSummary(context: Context, transcript: String): String {
-        val modelId = WeAgentSettings.defaultModelId() ?: WeAgentRepository.firstModelId()
+    /**
+     * 调用模型生成结构化总结。模型选择：群聊总结专用模型（[summaryModelId]）优先，
+     * 未指定时回退全局默认模型，再回退到已配置的第一个模型。
+     */
+    private suspend fun generateSummary(
+        context: Context,
+        transcript: String,
+        focus: String,
+        summaryModelId: String?,
+    ): String {
+        val modelId = summaryModelId
+            ?: WeAgentSettings.defaultModelId()
+            ?: WeAgentRepository.firstModelId()
         val model = modelId?.let { WeAgentRepository.getModel(it) }
         val provider = model?.let { WeAgentRepository.getModelProvider(it.providerId) }
         if (model == null || provider == null) {
@@ -219,11 +497,16 @@ object ChatSummary : SwitchFeature(),
         }
 
         val systemPrompt = context.localizedChatString(R.string.chat_summary_system_prompt)
+        val userMessage = if (focus.isNotBlank()) {
+            transcript + "\n\n（请特别关注以下要点：$focus）"
+        } else {
+            transcript
+        }
         val request = ModelProviderManager.buildRequest(
             model = model,
             messages = listOf(
                 LlmMessage(role = LlmRole.SYSTEM, content = systemPrompt),
-                LlmMessage(role = LlmRole.USER, content = transcript),
+                LlmMessage(role = LlmRole.USER, content = userMessage),
             ),
             tools = emptyList(),
             stream = false,

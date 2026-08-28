@@ -2260,7 +2260,23 @@
     <string name="chat_summary_failed">聊天总结失败：%1$s</string>
     <string name="chat_summary_no_model">未配置可用的模型，请在 WeAgent 设置中选择默认模型。</string>
     <string name="chat_summary_empty">模型返回了空的总结内容。</string>
-    <string name="chat_summary_system_prompt">你是一个得力的助手。用户会提供一段微信聊天记录，每行格式为“发言人: 消息内容”。请用简洁的中文概括这段对话的核心话题、讨论要点和结论，不超过 300 字。只输出总结本身，不要任何前缀、标签或格式标记。</string>
+    <string name="chat_summary_tab_analysis">分析报告</string>
+    <string name="chat_summary_tab_summary">智能总结</string>
+    <string name="chat_summary_focus_label">重点关注（可选）</string>
+    <string name="chat_summary_focus_example">例如：大家聊了吃的吗</string>
+    <string name="chat_summary_generate">✨ 生成完整群聊总结</string>
+    <string name="chat_summary_regenerate">重新生成</string>
+    <string name="chat_summary_summary_model">总结模型</string>
+    <string name="chat_summary_follow_default">跟随默认模型</string>
+    <string name="chat_summary_generated_at">生成时间：%1$s</string>
+    <string name="chat_summary_not_generated">尚未生成总结，请在上方输入关注点后点击生成。</string>
+        <string name="chat_summary_system_prompt">你是一位专业的微信群聊分析助手。用户会提供一段聊天记录，每行格式为“发言人: 消息内容”。请按以下要点输出结构化总结：
+1. 开头用一句话概括本次群聊的核心主题，如“群聊总结：……”。
+2. 基本统计：参与讨论人数、总消息数、最活跃的发言人。
+3. 话题分析：梳理出 3–5 个主要话题，每个话题简要说明讨论内容与结论。
+4. 关键结论：提炼讨论中达成的一致结论、待办事项或分歧点。
+5. 情绪氛围（可选）：一句话概括整体聊天氛围。
+要求：使用简洁凝练的中文，用 Markdown 标题组织，总字数控制在 400 字以内。只输出总结正文，不要任何额外前缀或说明。</string>
     <plurals name="chat_message_time_days_ago">
         <item quantity="other">%1$d 天前</item>
     </plurals>

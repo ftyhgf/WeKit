@@ -2300,7 +2300,23 @@
     <string name="chat_summary_failed">Chat summary failed: %1$s</string>
     <string name="chat_summary_no_model">No usable model configured. Please set a default model in WeAgent settings.</string>
     <string name="chat_summary_empty">The model returned an empty summary.</string>
-    <string name="chat_summary_system_prompt">You are a helpful assistant. The user will provide a WeChat chat transcript formatted as "speaker: message" per line. Summarize the key topics, discussion points and any conclusions concisely in Chinese, within 300 characters. Output only the summary itself without any prefix, labels or markdown.</string>
+    <string name="chat_summary_tab_analysis">Analysis</string>
+    <string name="chat_summary_tab_summary">AI summary</string>
+    <string name="chat_summary_focus_label">Focus (optional)</string>
+    <string name="chat_summary_focus_example">e.g. Did everyone talk about food?</string>
+    <string name="chat_summary_generate">✨ Generate full group summary</string>
+    <string name="chat_summary_regenerate">Regenerate</string>
+    <string name="chat_summary_summary_model">Summary model</string>
+    <string name="chat_summary_follow_default">Follow default model</string>
+    <string name="chat_summary_generated_at">Generated at: %1$s</string>
+    <string name="chat_summary_not_generated">No summary yet. Enter a focus above, then tap generate.</string>
+        <string name="chat_summary_system_prompt">You are a professional WeChat group chat analysis assistant. The user will provide a chat transcript where each line is “speaker: message”. Produce a structured summary following this outline:
+1. Opening: one sentence on the core theme, e.g. “Group summary: ...”.
+2. Basic stats: number of participants, total messages, and the most active speaker.
+3. Topic analysis: list 3–5 main topics, briefly describing what was discussed and the conclusion for each.
+4. Key takeaways: consistent conclusions, action items or disagreements worth noting.
+5. Mood (optional): one short sentence on the overall atmosphere.
+Write concise Chinese in Markdown headings, within 400 characters. Output only the summary body without any extra prefix or notes.</string>
     <plurals name="chat_message_time_days_ago">
         <item quantity="one">%1$d day ago</item>
         <item quantity="other">%1$d days ago</item>
