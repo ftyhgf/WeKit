@@ -6,6 +6,7 @@ import com.tencent.wcdb.DatabaseErrorHandler
 import com.tencent.wcdb.database.SQLiteCipherSpec
 import com.tencent.wcdb.database.SQLiteDatabase
 import dev.ujhhgtg.reflekt.reflekt
+import dev.ujhhgtg.wekit.R
 import dev.ujhhgtg.wekit.constants.Preferences
 import dev.ujhhgtg.wekit.dexkit.abc.IResolveDex
 import dev.ujhhgtg.wekit.dexkit.dsl.data
@@ -21,7 +22,6 @@ import dev.ujhhgtg.wekit.features.api.core.models.WeOfficialAccount
 import dev.ujhhgtg.wekit.features.api.core.models.normalizeChatroomMemberIds
 import dev.ujhhgtg.wekit.features.api.net.models.protobuf.ChatRoomDataProto
 import dev.ujhhgtg.wekit.features.core.ApiFeature
-import dev.ujhhgtg.wekit.features.core.Feature
 import dev.ujhhgtg.wekit.features.core.FeatureCategoryIds
 import dev.ujhhgtg.wekit.utils.WeLogger
 import dev.ujhhgtg.wekit.utils.reflection.BString
@@ -34,20 +34,19 @@ import java.lang.reflect.Modifier
 
 @OptIn(ExperimentalSerializationApi::class)
 @SuppressLint("DiscouragedApi")
-@Feature(
-    id = "数据库服务",
-    nameRes = "feature_we_database_api_name",
-    categoryIds = [FeatureCategoryIds.API],
-    descriptionRes = "feature_we_database_api_description",
-)
 object WeDatabaseApi : ApiFeature(), IResolveDex {
 
-    private val classMmKernel by dexClass {
+    override val technicalId = "数据库服务"
+    override val nameRes = R.string.feature_we_database_api_name
+    override val categoryIds = listOf(FeatureCategoryIds.API)
+    override val descriptionRes = R.string.feature_we_database_api_description
+
+    internal val classMmKernel by dexClass {
         matcher {
             usingEqStrings("MicroMsg.MMKernel", "Kernel not null, has initialized.")
         }
     }
-    private val methodGetStorage by dexMethod {
+    internal val methodGetStorage by dexMethod {
         matcher {
             declaredClass(classMmKernel.data.name)
             modifiers = Modifier.PUBLIC or Modifier.STATIC
@@ -72,6 +71,14 @@ object WeDatabaseApi : ApiFeature(), IResolveDex {
     private val classSqliteDbWrapper by dexClass {
         matcher {
             usingEqStrings("MicroMsg.SqliteDB", "sql is null ")
+        }
+    }
+    internal val methodSqliteWrapperRawQuery by dexMethod(allowFailure = true) {
+        matcher {
+            modifiers = Modifier.PUBLIC
+            usingEqStrings("sql is null ", "DB IS CLOSED ! {%s}")
+            paramTypes("java.lang.String", "java.lang.String[]", "int")
+            returnType("android.database.Cursor")
         }
     }
 
@@ -251,6 +258,15 @@ object WeDatabaseApi : ApiFeature(), IResolveDex {
             WHERE talker='$wxid'
             ORDER BY createTime DESC
             LIMIT $limit OFFSET $offset
+        """.trimIndent()
+
+        /** 按时间范围获取消息（createTime 为毫秒时间戳） */
+        fun messagesSince(wxid: String, sinceTime: Long, limit: Int) = """
+            SELECT msgId, msgSvrId, talker, content, type, createTime, isSend
+            FROM message
+            WHERE talker='$wxid' AND createTime >= $sinceTime
+            ORDER BY createTime DESC
+            LIMIT $limit
         """.trimIndent()
 
         /**
@@ -663,6 +679,33 @@ object WeDatabaseApi : ApiFeature(), IResolveDex {
         if (convId.isEmpty()) return emptyList()
         val offset = (pageIndex - 1) * pageSize
         return executeQuery(SqlStatements.messages(convId, pageSize, offset)).map { row ->
+            WeMessage(
+                msgId = row.long("msgId"),
+                msgSvrId = row.long("msgSvrId"),
+                talker = row.str("talker"),
+                content = row.str("content"),
+                typeCode = row.int("type"),
+                createTime = row.long("createTime"),
+                isSend = row.int("isSend")
+            )
+        }
+    }
+
+    /**
+     * 获取指定会话中【指定时间范围】内的消息（v3：聊天总结自定义时间范围）
+     * @param convId 会话 ID（单聊为对方 wxid，群聊为 xxx@chatroom）
+     * @param sinceTime 起始时间（毫秒时间戳），0 或负数表示不限时间（取最近 limit 条）
+     * @param limit 最大返回条数
+     */
+    fun getMessagesSince(convId: String, sinceTime: Long, limit: Int = 500): List<WeMessage> {
+        if (convId.isEmpty()) return emptyList()
+        val since = sinceTime.coerceAtLeast(0L)
+        val sql = if (since > 0L) {
+            SqlStatements.messagesSince(convId, since, limit)
+        } else {
+            SqlStatements.messages(convId, limit, 0)
+        }
+        return executeQuery(sql).map { row ->
             WeMessage(
                 msgId = row.long("msgId"),
                 msgSvrId = row.long("msgSvrId"),
