@@ -39,10 +39,13 @@ object CustomChatInputBarPlaceholderText : ClickableFeature(), IResolveDex, WeDa
     override val categoryIds = listOf(FeatureCategoryIds.CHAT)
     override val descriptionRes = R.string.feature_custom_chat_input_bar_placeholder_text_description
 
-    private var lastDayOfMonth by prefOption("custom_pt_day", 0)
+    // Epoch day (full calendar date) on which the counters were last reset. Stored as
+    // LocalDate.toEpochDay() so the daily reset is robust across month/year boundaries.
+    private var lastResetEpochDay by prefOption("custom_pt_day_epoch", 0L)
     private var totC by prefOption("custom_pt_tot_count", 0)
     private var textC by prefOption("custom_pt_text_count", 0)
     private var charC by prefOption("custom_pt_text_char_count", 0)
+    private var todayCharC by prefOption("custom_pt_today_char_count", 0)
     private var emojiC by prefOption("custom_pt_emoji_count", 0)
     private var transferC by prefOption("custom_pt_transfer_count", 0)
     private var redPacketC by prefOption("custom_pt_red_packet_count", 0)
@@ -53,11 +56,28 @@ object CustomChatInputBarPlaceholderText : ClickableFeature(), IResolveDex, WeDa
         $$"$totalCount",
         $$"$textCount",
         $$"$charCount",
+        $$"$todayCharCount",
         $$"$emojiCount",
         $$"$transferCount",
         $$"$redPacketCount",
         $$"$fileCount"
     )
+
+    // Resets all counters when the calendar date changes. Called on enable and before every
+    // message insert so the "today" stats roll over at midnight even if WeChat stays resident.
+    private fun resetCountersIfNewDay() {
+        val today = LocalDate.now().toEpochDay()
+        if (lastResetEpochDay == today) return
+        totC = 0
+        textC = 0
+        charC = 0
+        todayCharC = 0
+        emojiC = 0
+        transferC = 0
+        redPacketC = 0
+        fileC = 0
+        lastResetEpochDay = today
+    }
 
     private val methodChatFooterCanSend by dexMethod {
         matcher {
@@ -68,17 +88,7 @@ object CustomChatInputBarPlaceholderText : ClickableFeature(), IResolveDex, WeDa
     override fun onEnable() {
         WeDatabaseListenerApi.addListener(this)
 
-        val curDay = LocalDate.now().dayOfMonth
-        if (lastDayOfMonth != curDay) {
-            totC = 0
-            textC = 0
-            charC = 0
-            emojiC = 0
-            transferC = 0
-            redPacketC = 0
-            fileC = 0
-            lastDayOfMonth = curDay
-        }
+        resetCountersIfNewDay()
 
         methodChatFooterCanSend.hookAfter {
             val canSend = args[0] as Boolean
@@ -89,6 +99,7 @@ object CustomChatInputBarPlaceholderText : ClickableFeature(), IResolveDex, WeDa
                     .replace($$"$totalCount", totC.toString())
                     .replace($$"$textCount", textC.toString())
                     .replace($$"$charCount", charC.toString())
+                    .replace($$"$todayCharCount", todayCharC.toString())
                     .replace($$"$emojiCount", emojiC.toString())
                     .replace($$"$transferCount", transferC.toString())
                     .replace($$"$redPacketCount", redPacketC.toString())
@@ -105,6 +116,9 @@ object CustomChatInputBarPlaceholderText : ClickableFeature(), IResolveDex, WeDa
     override fun onInsert(table: String, values: ContentValues) {
         if (table != "message") return
 
+        // Roll counters over at midnight even if WeChat has been resident since before the day change.
+        resetCountersIfNewDay()
+
         val isSend = values.getAsInteger("isSend")
         val type = values.getAsInteger("type")
         val msgInfo = MessageInfo.fromContentValues(values)
@@ -113,15 +127,18 @@ object CustomChatInputBarPlaceholderText : ClickableFeature(), IResolveDex, WeDa
         if (type == MessageType.TEXT.code) {
             textC += 1
             charC += msgInfo.actualContent.length
+            todayCharC += msgInfo.actualContent.length
             totC += 1
         }
 
         if (type == MessageType.QUOTE.code) {
             textC += 1
-            charC += msgInfo.quoteMsgActualContent?.length ?: run {
+            val quoteLen = msgInfo.quoteMsgActualContent?.length ?: run {
                 WeLogger.w("CustomChatInputBarPlaceholderText", "failed to get quote message content")
                 0
             }
+            charC += quoteLen
+            todayCharC += quoteLen
             totC += 1
         }
 
