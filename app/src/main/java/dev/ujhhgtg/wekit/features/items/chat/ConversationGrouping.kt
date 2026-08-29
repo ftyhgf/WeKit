@@ -306,6 +306,10 @@ object ConversationGrouping : ClickableFeature(), IResolveDex,
     // conversation that wasn't in the homepage list, new chat, etc.).
     override fun onInsert(table: String, values: ContentValues) {
         if (table != "rconversation") return
+        // Skip aggregate-folder rows (wekit_folder_*) — those are written by
+        // ConversationAggregation and would otherwise trigger a redundant refresh.
+        val username = values.getAsString("username") ?: return
+        if (username.startsWith("wekit_folder_")) return
         scheduleRefresh()
     }
 
@@ -320,6 +324,12 @@ object ConversationGrouping : ClickableFeature(), IResolveDex,
         conflictAlgorithm: Int
     ) {
         if (table != "rconversation") return
+        // Skip updates that target only aggregate-folder rows, mirroring ConversationAggregation.
+        val targetUsername = values.getAsString("username")
+            ?: whereArgs?.singleOrNull()?.takeIf {
+                whereClause?.contains("username", ignoreCase = true) == true
+            }
+        if (targetUsername != null && targetUsername.startsWith("wekit_folder_")) return
         scheduleRefresh()
     }
 
