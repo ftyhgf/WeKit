@@ -109,7 +109,9 @@ import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
-object ConversationGrouping : ClickableFeature(), IResolveDex {
+object ConversationGrouping : ClickableFeature(), IResolveDex,
+    WeDatabaseListenerApi.IInsertListener,
+    WeDatabaseListenerApi.IUpdateListener {
 
     override val technicalId = "对话分组"
     override val nameRes = R.string.feature_conversation_grouping_name
@@ -193,6 +195,9 @@ object ConversationGrouping : ClickableFeature(), IResolveDex {
     private val groupMembersCache = ConcurrentHashMap<String, List<String>>()
 
     override fun onEnable() {
+        WeDatabaseListenerApi.addListener(this)
+        startRefreshThread()
+
         if (groupingBackend == GroupingBackend.QUERY_REWRITE) {
             hookConversationListQuery()
         } else {
@@ -289,10 +294,68 @@ object ConversationGrouping : ClickableFeature(), IResolveDex {
     }
 
     override fun onDisable() {
+        WeDatabaseListenerApi.removeListener(this)
+        stopRefreshThread()
         WeConversationListViewApi.removePositionProvider(adapterPositionProvider)
         bindingAdapter.remove()
         clearAdapterCaches()
         snapshotFailuresLogged.clear()
+    }
+
+    // Called by WeDatabaseListenerApi when WeChat inserts a conversation row (new message from a
+    // conversation that wasn't in the homepage list, new chat, etc.).
+    override fun onInsert(table: String, values: ContentValues) {
+        if (table != "rconversation") return
+        scheduleRefresh()
+    }
+
+    // Called by WeDatabaseListenerApi when WeChat updates conversation rows (digest change, read
+    // state, mute toggle, reorder...). This is the path a "mark as read" write goes through, which
+    // is exactly the case that would otherwise leave a conversation stuck in the unread tab.
+    override fun onUpdate(
+        table: String,
+        values: ContentValues,
+        whereClause: String?,
+        whereArgs: Array<String>?,
+        conflictAlgorithm: Int
+    ) {
+        if (table != "rconversation") return
+        scheduleRefresh()
+    }
+
+    private fun scheduleRefresh() {
+        // Only meaningful while a filter is actually active ("全部" needs no re-apply).
+        if (activePredicate == null) return
+        val handler = refreshHandler ?: return
+        handler.removeCallbacksAndMessages(REFRESH_TASK_TOKEN)
+        handler.postAtTime(
+            ::doRefreshConversations,
+            REFRESH_TASK_TOKEN,
+            SystemClock.uptimeMillis() + REFRESH_DEBOUNCE_MS
+        )
+    }
+
+    private fun doRefreshConversations() {
+        if (activePredicate == null) return
+        if (groupingBackend == GroupingBackend.ADAPTER_FILTER) {
+            clearAdapterCaches()
+        }
+        refreshConversations(groupingBackend)
+    }
+
+    private fun startRefreshThread() {
+        val thread = HandlerThread("wekit-conversation-grouping").also {
+            it.start()
+            refreshThread = it
+        }
+        refreshHandler = Handler(thread.looper)
+    }
+
+    private fun stopRefreshThread() {
+        refreshHandler?.removeCallbacksAndMessages(null)
+        refreshHandler = null
+        refreshThread?.quitSafely()
+        refreshThread = null
     }
 
     private fun hookConversationListAdapter() {
