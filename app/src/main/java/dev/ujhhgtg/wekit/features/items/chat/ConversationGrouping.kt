@@ -1,6 +1,10 @@
 package dev.ujhhgtg.wekit.features.items.chat
 
+import android.content.ContentValues
 import android.content.Context
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.SystemClock
 import android.widget.ListView
 import androidx.activity.ComponentActivity
 import androidx.annotation.StringRes
@@ -76,6 +80,7 @@ import dev.ujhhgtg.wekit.dexkit.abc.IResolveDex
 import dev.ujhhgtg.wekit.dexkit.dsl.dexMethod
 import dev.ujhhgtg.wekit.features.api.core.WeConversationApi
 import dev.ujhhgtg.wekit.features.api.core.WeDatabaseApi
+import dev.ujhhgtg.wekit.features.api.core.WeDatabaseListenerApi
 import dev.ujhhgtg.wekit.features.api.ui.WeConversationListViewApi
 import dev.ujhhgtg.wekit.features.core.ClickableFeature
 import dev.ujhhgtg.wekit.features.core.FeatureCategoryIds
@@ -193,6 +198,11 @@ object ConversationGrouping : ClickableFeature(), IResolveDex,
     private var groupsCache: List<ChatGroup>? = null
 
     private val groupMembersCache = ConcurrentHashMap<String, List<String>>()
+
+    private const val REFRESH_DEBOUNCE_MS = 250L
+    private val REFRESH_TASK_TOKEN = Any()
+    private var refreshThread: HandlerThread? = null
+    private var refreshHandler: Handler? = null
 
     override fun onEnable() {
         WeDatabaseListenerApi.addListener(this)
