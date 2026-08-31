@@ -63,10 +63,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import dev.ujhhgtg.wekit.utils.android.copyToClipboard
+import dev.ujhhgtg.wekit.utils.serialization.DefaultJson
+import kotlinx.serialization.Serializable
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -136,7 +144,11 @@ object ChatSummary : SwitchFeature(),
     private sealed interface SummaryState {
         data object Idle : SummaryState
         data object Loading : SummaryState
-        data class Success(val summary: String, val generatedAt: String) : SummaryState
+        data class Success(
+            val summary: String,
+            val report: ChatReport?,
+            val generatedAt: String,
+        ) : SummaryState
         data class Error(val message: String) : SummaryState
     }
 
@@ -146,6 +158,56 @@ object ChatSummary : SwitchFeature(),
         val total: Int,
         val transcript: String,
     )
+
+    /** 结构化总结（v5）：analysis=图1 分析报告，summary=图2 智能总结。 */
+    @Serializable
+    private data class ChatReport(
+        val analysis: AnalysisData? = null,
+        val summary: SummaryData? = null,
+    )
+
+    @Serializable
+    private data class AnalysisData(
+        val overview: String = "",
+        val metrics: MetricsData? = null,
+        val topSpeakers: List<SpeakerStat> = emptyList(),
+        val keywords: List<String> = emptyList(),
+        val timeSlots: List<TimeSlotData> = emptyList(),
+        val emotions: List<EmotionData> = emptyList(),
+        val insights: List<String> = emptyList(),
+    )
+
+    @Serializable
+    private data class MetricsData(
+        val participants: Int = 0,
+        val messages: Int = 0,
+        val historyMessages: Int = 0,
+    )
+
+    @Serializable
+    private data class SpeakerStat(val name: String = "", val count: Int = 0)
+
+    @Serializable
+    private data class TimeSlotData(val label: String = "", val name: String = "", val percent: Int = 0)
+
+    @Serializable
+    private data class EmotionData(val label: String = "", val value: Int = 0)
+
+    @Serializable
+    private data class SummaryData(
+        val keywords: List<String> = emptyList(),
+        val language: String = "",
+        val participants: String = "",
+        val structure: String = "",
+        val duration: String = "",
+        val messageDensity: String = "",
+        val emotion: String = "",
+        val activeUsers: List<SpeakerStat> = emptyList(),
+        val topics: List<TopicData> = emptyList(),
+    )
+
+    @Serializable
+    private data class TopicData(val title: String = "", val points: List<String> = emptyList())
 
     @OptIn(ExperimentalMaterial3ExpressiveApi::class)
     @Composable
@@ -188,7 +250,7 @@ object ChatSummary : SwitchFeature(),
                     onSuccess = { text ->
                         val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
                             .format(Date())
-                        SummaryState.Success(text, stamp)
+                        SummaryState.Success(text, parseChatReport(text), stamp)
                     },
                     onFailure = { e ->
                         SummaryState.Error(
@@ -266,7 +328,7 @@ object ChatSummary : SwitchFeature(),
                     }
 
                     when (val tab = selectedTab) {
-                        SummaryTab.ANALYSIS -> AnalysisContent(analysis)
+                        SummaryTab.ANALYSIS -> AnalysisContent(analysis, summaryState)
                         SummaryTab.SUMMARY -> SummaryContent(summaryState)
                     }
                 }
@@ -376,10 +438,20 @@ object ChatSummary : SwitchFeature(),
         }
     }
 
-    /** 分析报告 Tab：发言人统计列表。 */
+    /** 分析报告 Tab：优先渲染图1 紫色分析卡片（模型 JSON），未生成/无结构时回退本地发言人统计。 */
     @Composable
-    private fun AnalysisContent(analysis: ConversationAnalysis?) {
+    private fun AnalysisContent(analysis: ConversationAnalysis?, state: SummaryState) {
         val context = androidx.compose.ui.platform.LocalContext.current
+        val report = (state as? SummaryState.Success)?.report?.analysis
+        if (report != null && (
+                report.metrics != null || report.topSpeakers.isNotEmpty() || report.keywords.isNotEmpty()
+                || report.timeSlots.isNotEmpty() || report.emotions.isNotEmpty() || report.insights.isNotEmpty()
+                )) {
+            LazyColumn(Modifier.heightIn(max = 340.dp)) {
+                item { AnalysisPurpleCard(report) }
+            }
+            return
+        }
         LazyColumn(Modifier.heightIn(max = 340.dp)) {
             if (analysis == null) {
                 item { Text(stringResource(R.string.chat_summary_loading)) }
@@ -464,23 +536,28 @@ object ChatSummary : SwitchFeature(),
                     item { Text(state.message) }
                 }
                 is SummaryState.Success -> {
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
-                                .padding(12.dp),
-                        ) {
-                            Text(
-                                text = state.summary,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = context.localizedChatString(R.string.chat_summary_generated_at, state.generatedAt),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                    val summaryData = state.report?.summary
+                    if (summaryData != null) {
+                        item { SummaryReportCard(state, summaryData) }
+                    } else {
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                                    .padding(12.dp),
+                            ) {
+                                Text(
+                                    text = state.summary,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = context.localizedChatString(R.string.chat_summary_generated_at, state.generatedAt),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                     item {
@@ -702,6 +779,366 @@ object ChatSummary : SwitchFeature(),
                     }
                 }
             }
+        }
+    }
+
+    /** 解析模型返回的结构化 JSON（v5：图1 分析报告 + 图2 智能总结），失败返回 null 交由 UI 兜底。 */
+    private fun parseChatReport(raw: String): ChatReport? {
+        val text = raw.trim()
+        val start = text.indexOf('{')
+        val end = text.lastIndexOf('}')
+        if (start < 0 || end <= start) return null
+        val json = text.substring(start, end + 1)
+        return runCatching { DefaultJson.decodeFromString<ChatReport>(json) }.getOrNull()
+    }
+
+    /** 图1 分析报告紫色卡片（核心指标/活跃排行/词云/时段画像/情绪指数/智能洞察）。 */
+    @Composable
+    private fun AnalysisPurpleCard(report: AnalysisData) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val purpleBrush = Brush.verticalGradient(listOf(Color(0xFF7C4DFF), Color(0xFF9C6BFF)))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(purpleBrush, RoundedCornerShape(16.dp))
+                .padding(14.dp),
+        ) {
+            Text(
+                text = context.localizedChatString(R.string.chat_summary_tab_analysis),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+            if (report.overview.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = report.overview,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                )
+            }
+            // 核心指标
+            report.metrics?.let { m ->
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PurpleMetricCell(m.participants.toString(), context.localizedChatString(R.string.chat_summary_metric_participants), Modifier.weight(1f))
+                    PurpleMetricCell(m.messages.toString(), context.localizedChatString(R.string.chat_summary_metric_messages), Modifier.weight(1f))
+                    PurpleMetricCell(m.historyMessages.toString(), context.localizedChatString(R.string.chat_summary_metric_history), Modifier.weight(1f))
+                }
+            }
+            // 活跃排行
+            if (report.topSpeakers.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                PurpleSectionTitle(context.localizedChatString(R.string.chat_summary_card_top_speakers))
+                val maxCount = report.topSpeakers.maxOf { it.count }.coerceAtLeast(1)
+                report.topSpeakers.forEach { s ->
+                    PurpleBarRow(s.name, s.count, maxCount)
+                }
+            }
+            // 词云
+            if (report.keywords.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                PurpleSectionTitle(context.localizedChatString(R.string.chat_summary_card_wordcloud))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    report.keywords.forEach { kw ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White.copy(alpha = 0.22f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        ) {
+                            Text(text = kw, style = MaterialTheme.typography.labelMedium, color = Color.White)
+                        }
+                    }
+                }
+            }
+            // 时段画像
+            if (report.timeSlots.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                PurpleSectionTitle(context.localizedChatString(R.string.chat_summary_card_time_slots))
+                report.timeSlots.forEach { slot ->
+                    PurplePercentRow("${slot.label} ${slot.name}", slot.percent)
+                }
+            }
+            // 情绪指数
+            if (report.emotions.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                PurpleSectionTitle(context.localizedChatString(R.string.chat_summary_card_emotions))
+                report.emotions.forEach { e ->
+                    PurplePercentRow(e.label, e.value)
+                }
+            }
+            // 智能洞察
+            if (report.insights.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                PurpleSectionTitle(context.localizedChatString(R.string.chat_summary_card_insights))
+                report.insights.forEach { insight ->
+                    Text(
+                        text = "\u2022 $insight",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White,
+                        modifier = Modifier.padding(vertical = 2.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    /** 紫色卡片小标题。 */
+    @Composable
+    private fun PurpleSectionTitle(text: String) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = Color.White.copy(alpha = 0.85f),
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+    }
+
+    /** 紫色卡片核心指标格子。 */
+    @Composable
+    private fun PurpleMetricCell(value: String, label: String, modifier: Modifier = Modifier) {
+        Column(
+            modifier = modifier
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color.White.copy(alpha = 0.16f))
+                .padding(vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.8f))
+        }
+    }
+
+    /** 紫色卡片活跃排行进度条。 */
+    @Composable
+    private fun PurpleBarRow(speaker: String, count: Int, maxCount: Int) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = speaker,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = Color.White,
+                modifier = Modifier.width(88.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.White.copy(alpha = 0.18f)),
+            ) {
+                val fraction = count.toFloat() / maxCount
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.White),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(text = "\u00d7 $count", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.9f))
+        }
+    }
+
+    /** 紫色卡片时段/情绪进度条（带百分比/分值）。 */
+    @Composable
+    private fun PurplePercentRow(label: String, value: Int) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = Color.White,
+                modifier = Modifier.width(108.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.White.copy(alpha = 0.18f)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth((value.coerceIn(0, 100) / 100f))
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.White),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(text = "$value", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.9f))
+        }
+    }
+
+    /** 图2 智能总结卡片（快速摘要/活跃用户/按话题分类）。 */
+    @Composable
+    private fun SummaryReportCard(state: SummaryState.Success, data: SummaryData) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        Column(Modifier.fillMaxWidth()) {
+            // 快速摘要
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+            ) {
+                Text(
+                    text = context.localizedChatString(R.string.chat_summary_card_quick_summary),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(8.dp))
+                if (data.keywords.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        data.keywords.forEach { kw ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                            ) {
+                                Text(text = kw, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                SummaryKeyValueRow(context.localizedChatString(R.string.chat_summary_language), data.language)
+                SummaryKeyValueRow(context.localizedChatString(R.string.chat_summary_participants), data.participants)
+                SummaryKeyValueRow(context.localizedChatString(R.string.chat_summary_structure), data.structure)
+                SummaryKeyValueRow(context.localizedChatString(R.string.chat_summary_duration), data.duration)
+                SummaryKeyValueRow(context.localizedChatString(R.string.chat_summary_density), data.messageDensity)
+                SummaryKeyValueRow(context.localizedChatString(R.string.chat_summary_emotion), data.emotion)
+            }
+            // 活跃用户
+            if (data.activeUsers.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = context.localizedChatString(R.string.chat_summary_card_active_users),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(4.dp))
+                val maxCount = data.activeUsers.maxOf { it.count }.coerceAtLeast(1)
+                data.activeUsers.forEach { u ->
+                    ActiveUserBar(u.name, u.count, maxCount)
+                }
+            }
+            // 按话题分类
+            if (data.topics.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = context.localizedChatString(R.string.chat_summary_card_topics),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(4.dp))
+                data.topics.forEach { topic ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                            .padding(bottom = 6.dp),
+                    ) {
+                        Text(
+                            text = topic.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        topic.points.forEach { point ->
+                            Text(
+                                text = "\u2022 $point",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = context.localizedChatString(R.string.chat_summary_generated_at, state.generatedAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    /** 智能总结键值行。 */
+    @Composable
+    private fun SummaryKeyValueRow(label: String, value: String) {
+        if (value.isBlank()) return
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.width(76.dp),
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
+
+    /** 智能总结活跃用户进度条。 */
+    @Composable
+    private fun ActiveUserBar(name: String, count: Int, maxCount: Int) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.width(88.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                val fraction = count.toFloat() / maxCount
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(text = "\u00d7 $count", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

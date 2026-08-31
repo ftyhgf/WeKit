@@ -2280,13 +2280,42 @@
     <string name="chat_summary_preset_dispute">爭議與分歧</string>
     <string name="chat_summary_preset_progress">時間線與進展</string>
     <string name="chat_summary_not_generated">尚未生成總結，請在上方輸入關注點後點擊生成。</string>
-        <string name="chat_summary_system_prompt">你是一位專業的微信羣聊分析助手。使用者會提供一段聊天記錄，每行格式為「發言人: 訊息內容」。請按以下要點輸出結構化總結：
-1. 開頭用一句話概括本次羣聊的核心主題，如「羣聊總結：……」
-2. 基本統計：參與討論人數、總訊息數、最活躍的發言人。
-3. 話題分析：梳理出 3–5 個主要話題，每個話題簡要說明討論內容與結論。
-4. 關鍵結論：提煉討論中達成的一致結論、待辦事項或分歧點。
-5. 情緒氛圍（可選）：一句話概括整體聊天氛圍。
-要求：使用簡潔凝練的中文，用 Markdown 標題組織，總字數控制在 400 字以內。只輸出總結正文，不要任何額外前綴或說明。</string>
+    
+    <string name="chat_summary_metric_participants">參與人數</string>
+    <string name="chat_summary_metric_messages">訊息總數</string>
+    <string name="chat_summary_metric_history">歷史訊息</string>
+    <string name="chat_summary_card_top_speakers">活躍排行</string>
+    <string name="chat_summary_card_wordcloud">高頻詞雲</string>
+    <string name="chat_summary_card_time_slots">時段畫像</string>
+    <string name="chat_summary_card_emotions">情緒指數</string>
+    <string name="chat_summary_card_insights">智慧洞察</string>
+    <string name="chat_summary_card_quick_summary">快速摘要</string>
+    <string name="chat_summary_card_active_users">活躍使用者</string>
+    <string name="chat_summary_card_topics">按話題分類</string>
+    <string name="chat_summary_language">對話語言</string>
+    <string name="chat_summary_participants">參與者</string>
+    <string name="chat_summary_structure">對話結構</string>
+    <string name="chat_summary_duration">對話時長</string>
+    <string name="chat_summary_density">訊息密度</string>
+    <string name="chat_summary_emotion">情緒分析</string>
+    <string name="chat_summary_system_prompt">你是一位專業的微信羣聊分析助手。使用者會提供一段聊天記錄，每行格式為「發言人: 訊息內容」。請分析該聊天記錄，並【只輸出一個 JSON 物件，不要輸出任何其他文字、不要用 Markdown 程式碼區塊包裹】。JSON 結構必須嚴格如下（欄位缺省時填空字串/0/空陣列）：
+{
+  "analysis": {
+    "overview": "一句話概括本次羣聊的核心主題",
+    "metrics": {"participants": 參與討論人數整數, "messages": 本次訊息總數整數, "historyMessages": 歷史訊息總數整數},
+    "topSpeakers": [{"name": "發言人暱稱", "count": 訊息條數整數}],
+    "keywords": ["高頻詞1", "高頻詞2"],
+    "timeSlots": [{"label": "00:00-06:00", "name": "深夜精靈", "percent": 佔比整數}, {"label": "06:00-09:00", "name": "早起鳥兒", "percent": 佔比整數}, {"label": "09:00-18:00", "name": "帶薪摸魚", "percent": 佔比整數}, {"label": "18:00-24:00", "name": "夜貓主場", "percent": 佔比整數}],
+    "emotions": [{"label": "快樂濃度", "value": 0到100整數}, {"label": "激動機率", "value": 0到100整數}, {"label": "疑惑指數", "value": 0到100整數}, {"label": "抑鬱情緒", "value": 0到100整數}, {"label": "無話程度", "value": 0到100整數}],
+    "insights": ["智慧洞察1", "智慧洞察2"]
+  },
+  "summary": {
+    "quick": {"keywords": ["關鍵詞1"], "language": "對話語言", "participants": "參與人數描述", "structure": "對話結構", "duration": "對話時長", "messageDensity": "訊息密度（高/中/低）", "emotion": "整體情緒"},
+    "activeUsers": [{"name": "活躍使用者暱稱", "count": 訊息條數整數}],
+    "topics": [{"title": "話題標題", "points": ["要點1", "要點2"]}]
+  }
+}
+要求：數值必須是真實統計，不得編造；發言人使用聊天記錄中的真實暱稱；timeSlots 的 percent 四項合計應為 100；全部使用繁體中文；只輸出該 JSON 物件本身。</string>
     <plurals name="chat_message_time_days_ago">
         <item quantity="other">%1$d 天前</item>
     </plurals>

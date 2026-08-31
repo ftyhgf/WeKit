@@ -2325,13 +2325,42 @@
     <string name="chat_summary_preset_dispute">Disputes &amp; disagreements</string>
     <string name="chat_summary_preset_progress">Timeline &amp; progress</string>
     <string name="chat_summary_not_generated">No summary yet. Enter a focus above, then tap generate.</string>
-        <string name="chat_summary_system_prompt">You are a professional WeChat group chat analysis assistant. The user will provide a chat transcript where each line is “speaker: message”. Produce a structured summary following this outline:
-1. Opening: one sentence on the core theme, e.g. “Group summary: ...”.
-2. Basic stats: number of participants, total messages, and the most active speaker.
-3. Topic analysis: list 3–5 main topics, briefly describing what was discussed and the conclusion for each.
-4. Key takeaways: consistent conclusions, action items or disagreements worth noting.
-5. Mood (optional): one short sentence on the overall atmosphere.
-Write concise Chinese in Markdown headings, within 400 characters. Output only the summary body without any extra prefix or notes.</string>
+    
+    <string name="chat_summary_metric_participants">Participants</string>
+    <string name="chat_summary_metric_messages">Messages</string>
+    <string name="chat_summary_metric_history">History</string>
+    <string name="chat_summary_card_top_speakers">Top speakers</string>
+    <string name="chat_summary_card_wordcloud">Word cloud</string>
+    <string name="chat_summary_card_time_slots">Time profile</string>
+    <string name="chat_summary_card_emotions">Emotions</string>
+    <string name="chat_summary_card_insights">Insights</string>
+    <string name="chat_summary_card_quick_summary">Quick summary</string>
+    <string name="chat_summary_card_active_users">Active users</string>
+    <string name="chat_summary_card_topics">Topics</string>
+    <string name="chat_summary_language">Language</string>
+    <string name="chat_summary_participants">Participants</string>
+    <string name="chat_summary_structure">Structure</string>
+    <string name="chat_summary_duration">Duration</string>
+    <string name="chat_summary_density">Density</string>
+    <string name="chat_summary_emotion">Mood</string>
+    <string name="chat_summary_system_prompt">You are a professional WeChat group chat analysis assistant. The user will provide a chat transcript where each line is “speaker: message”. Analyze the transcript and output ONLY ONE JSON object (no extra text, no Markdown code fences). The JSON must strictly follow this schema (use empty string / 0 / empty array when a field is unavailable):
+{
+  "analysis": {
+    "overview": "one sentence on the core theme",
+    "metrics": {"participants": int, "messages": int, "historyMessages": int},
+    "topSpeakers": [{"name": "speaker", "count": int}],
+    "keywords": ["keyword1", "keyword2"],
+    "timeSlots": [{"label": "00:00-06:00", "name": "Night Owl", "percent": int}, {"label": "06:00-09:00", "name": "Early Bird", "percent": int}, {"label": "09:00-18:00", "name": "Office Slacker", "percent": int}, {"label": "18:00-24:00", "name": "Night Home", "percent": int}],
+    "emotions": [{"label": "Happiness", "value": int 0-100}, {"label": "Excitement", "value": int 0-100}, {"label": "Confusion", "value": int 0-100}, {"label": "Sadness", "value": int 0-100}, {"label": "Silence", "value": int 0-100}],
+    "insights": ["insight1", "insight2"]
+  },
+  "summary": {
+    "quick": {"keywords": ["keyword1"], "language": "language", "participants": "participants description", "structure": "conversation structure", "duration": "duration", "messageDensity": "high/medium/low", "emotion": "overall mood"},
+    "activeUsers": [{"name": "user", "count": int}],
+    "topics": [{"title": "topic title", "points": ["point1", "point2"]}]
+  }
+}
+Requirements: numbers must reflect real statistics, never fabricate; use real speaker names from the transcript; the four timeSlots percents should sum to 100; write in Chinese. Output only the JSON object itself.</string>
     <plurals name="chat_message_time_days_ago">
         <item quantity="one">%1$d day ago</item>
         <item quantity="other">%1$d days ago</item>
