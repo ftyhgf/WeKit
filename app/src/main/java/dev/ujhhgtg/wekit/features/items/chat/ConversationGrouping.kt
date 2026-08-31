@@ -335,7 +335,9 @@ object ConversationGrouping : ClickableFeature(), IResolveDex,
 
     private fun scheduleRefresh() {
         // Only meaningful while a filter is actually active ("全部" needs no re-apply).
-        if (activePredicate == null) return
+        // Judge by the active group instead of activePredicate so this also works under the
+        // ADAPTER_FILTER backend, where activePredicate stays null by design.
+        if (isAllTab(activeAdapterGroup.id)) return
         val handler = refreshHandler ?: return
         handler.removeCallbacksAndMessages(REFRESH_TASK_TOKEN)
         handler.postAtTime(
@@ -346,7 +348,19 @@ object ConversationGrouping : ClickableFeature(), IResolveDex,
     }
 
     private fun doRefreshConversations() {
-        if (activePredicate == null) return
+        if (isAllTab(activeAdapterGroup.id)) return
+        // SQL custom groups (including "unread"-style groups whose whereClause filters on
+        // unReadCount) freeze their member set into a username IN (...) snapshot when the tab is
+        // tapped. Marking a chat as read changes that set, but the frozen snapshot never updates,
+        // so the conversation stays in the tab until the user re-enters it. Re-resolve members and
+        // rebuild the predicate on refresh so an onUpdate-triggered refresh actually drops it.
+        if (activeAdapterGroup.type == GroupType.SQL) {
+            groupMembersCache.remove(activeAdapterGroup.id)
+            activeAdapterMembers = getGroupMembers(activeAdapterGroup).toSet()
+            if (groupingBackend == GroupingBackend.QUERY_REWRITE) {
+                activePredicate = buildGroupPredicate(activeAdapterGroup)
+            }
+        }
         if (groupingBackend == GroupingBackend.ADAPTER_FILTER) {
             clearAdapterCaches()
         }
