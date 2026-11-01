@@ -1,0 +1,39 @@
+package io.ge.wawo.features.items.chat_input_bar_menu
+
+import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.outlined.Voice_chat
+import io.ge.wawo.R
+import io.ge.wawo.features.api.ui.WeChatInputBarMenuApi
+import io.ge.wawo.features.api.ui.WeCurrentConversationApi
+import io.ge.wawo.features.core.FeatureCategoryIds
+import io.ge.wawo.features.core.SwitchFeature
+import io.ge.wawo.features.items.chat.panel.selectAndSendVoice
+
+object SendVoiceFile : SwitchFeature() {
+
+    override val technicalId = "发送语音文件"
+    override val nameRes = R.string.feature_send_voice_file_name
+    override val categoryIds = listOf(FeatureCategoryIds.CHAT)
+    override val descriptionRes = R.string.feature_send_voice_file_description
+
+    private val provider = WeChatInputBarMenuApi.IActionItemsProvider {
+        listOf(
+            WeChatInputBarMenuApi.ActionItem(
+                id = "send_voice_file",
+                icon = MaterialSymbols.Outlined.Voice_chat,
+                label = localizedChatInputString(R.string.feature_send_voice_file_name),
+                onClick = { context, _ ->
+                    selectAndSendVoice(context, WeCurrentConversationApi.value)
+                }
+            )
+        )
+    }
+
+    override fun onEnable() {
+        WeChatInputBarMenuApi.addProvider(provider)
+    }
+
+    override fun onDisable() {
+        WeChatInputBarMenuApi.removeProvider(provider)
+    }
+}

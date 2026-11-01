@@ -1,0 +1,19 @@
+# ====================================================================
+# XPOSED ENTRY POINTS (Critical Startup)
+# ====================================================================
+Lio/ge/wawo/loader/entry/lxp/LxpHookEntry;
+Lio/ge/wawo/loader/entry/xp51/Xp51HookEntry;
+
+# ====================================================================
+# CORE APIs & INTERNAL HOOKING INTERFACES
+# ====================================================================
+Lio/ge/wawo/features/api/core/WeAppMsgApi;
+Lio/ge/wawo/features/api/core/WeConversationApi;
+Lio/ge/wawo/features/api/core/WeDatabaseApi;
+Lio/ge/wawo/features/api/core/WeDatabaseListenerApi;
+Lio/ge/wawo/features/api/core/WeMessageApi;
+Lio/ge/wawo/features/api/core/WeServiceApi;
+Lio/ge/wawo/features/api/core/WeUnsafeApi;
+Lio/ge/wawo/features/api/net/WeNetSceneApi;
+Lio/ge/wawo/features/api/net/WePacketHelper;
+Lio/ge/wawo/features/api/net/listener/WePacketDispatcher;
